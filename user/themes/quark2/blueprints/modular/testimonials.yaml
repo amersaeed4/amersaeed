@@ -1,0 +1,32 @@
+title: Testimonials
+'@extends': default
+
+form:
+  fields:
+    tabs:
+      fields:
+        testimonials:
+          type: tab
+          title: Testimonials
+          fields:
+            header.testimonials:
+              name: testimonials
+              type: list
+              label: Testimonials
+              style: vertical
+              collapsed: true
+
+              fields:
+                .quote:
+                  type: textarea
+                  label: Quote
+                  rows: 3
+                .name:
+                  type: text
+                  label: Name
+                .role:
+                  type: text
+                  label: Role
+                .company:
+                  type: text
+                  label: Company

@@ -1,0 +1,33 @@
+ui:
+  branding:
+    mode: custom
+    text: Grav
+    logoLight: logo-light-fbc64b3bcb.png
+    logoDark: logo-dark-b3f66e9bb7.png
+    title: 'Amer Saeed admin'
+    subtitle: ''
+    showPoweredBy: false
+    favicon: favicon-favicon-df68946101.png
+  defaults:
+    colorMode: ''
+    accentHue: 271
+    accentSaturation: 91
+    fontFamily: google-sans
+    fontSize: normal
+    editorMode: normal
+    editorKeymap: default
+    editorStickyToolbar: true
+    editorFixedHeight: 0
+    adminLanguage: en-US
+    pagesPerPage: 20
+    pagesViewMode: tree
+    usersViewMode: cards
+    groupsViewMode: cards
+    pluginsViewMode: cards
+    themesViewMode: cards
+  settings:
+    autoSaveEnabled: true
+    autoSaveToolbarUndo: true
+    autoSaveBatchWindowMs: 0
+    collabEnabled: true
+    menubarLinks: {  }

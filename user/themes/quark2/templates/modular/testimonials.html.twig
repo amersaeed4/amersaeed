@@ -1,0 +1,19 @@
+<section class="section modular-testimonials">
+    <div class="container">
+        <div class="frame-box">
+            {{ content|raw }}
+
+            <div class="testimonial-grid">
+            {% for t in page.header.testimonials %}
+                <div class="testimonial-card">
+                    <div class="quote-mark" aria-hidden="true">&ldquo;</div>
+                    <blockquote>{{ t.quote }}</blockquote>
+                    <footer>
+                        <strong>{{ t.name }}</strong>{% if t.role %}, {{ t.role }}{% endif %}{% if t.company %}<br>{{ t.company }}{% endif %}
+                    </footer>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>

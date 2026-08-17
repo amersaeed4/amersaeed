@@ -1,0 +1,27 @@
+<section class="section modular-features" data-layout="{{ page.header.class|default('small') }}">
+    <div class="container">
+        <div class="frame-box">
+            {{ content|raw }}
+
+            <div class="columns">
+            {% for feature in page.header.features %}
+                <div class="column">
+                    {% if feature.url %}
+                        {% set is_external = feature.url starts with 'http://' or feature.url starts with 'https://' or feature.url starts with 'mailto:' or feature.url starts with 'tel:' or feature.url starts with '#' %}
+                        {% set feature_href = is_external ? feature.url : base_url ~ feature.url %}
+                        <a href="{{ feature_href }}" style="text-decoration:none;color:inherit;display:block;">
+                    {% endif %}
+                    <div class="feature-icon">
+                        {% if feature.icon %}<i class="fa-solid fa-{{ feature.icon }}" aria-hidden="true"></i>{% endif %}
+                        {% if feature.header %}<h6>{{ feature.header }}</h6>{% endif %}
+                    </div>
+                    <div class="feature-content">
+                        {% if feature.text %}<p>{{ feature.text }}</p>{% endif %}
+                    </div>
+                    {% if feature.url %}</a>{% endif %}
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>

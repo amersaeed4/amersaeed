@@ -1,0 +1,13 @@
+<section class="section modular-form-block">
+    <div class="container">
+        <div class="frame-box form-frame">
+            {{ content|raw }}
+
+            {% if config.plugins.form.modular_form_fix %}
+                {% include "forms/form.html.twig" with {form: forms({route: page.route})} %}
+            {% else %}
+                {% include "forms/form.html.twig" %}
+            {% endif %}
+        </div>
+    </div>
+</section>

@@ -1,0 +1,15 @@
+<footer id="footer" class="section section-tight">
+    <div class="container footer-inner">
+        <nav class="footer-nav" aria-label="{{ 'THEME_QUARK2.ARIA.PRIMARY_NAV'|t|e('html_attr') }}">
+            <ul>
+            {% for p in pages.children.visible %}
+                <li><a href="{{ p.url }}" class="{{ (p.active or p.activeChild) ? 'active' : '' }}">{{ p.menu }}</a></li>
+            {% endfor %}
+            </ul>
+        </nav>
+
+        {% include 'partials/social-links.html.twig' %}
+
+        <p class="footer-copyright">&copy; {{ "now"|date("Y") }} {{ site.author.name|default(site.title) }}. All rights reserved.</p>
+    </div>
+</footer>

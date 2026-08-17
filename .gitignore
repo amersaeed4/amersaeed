@@ -1,0 +1,24 @@
+# Grav — generated/runtime, safe to delete and regenerate
+/cache/*
+!/cache/.gitkeep
+/logs/*
+!/logs/.gitkeep
+/tmp/*
+!/tmp/.gitkeep
+/backup/*
+!/backup/.gitkeep
+
+# Dependencies — reinstall with `composer install`
+/vendor/
+
+# Credentials — admin password hash, API keys, etc. Never commit these.
+/user/accounts/*
+!/user/accounts/.gitkeep
+!/user/accounts/.htaccess
+/user/config/security-private.php
+.env
+.env.*.local
+.env.local
+
+# OS / editor cruft
+.DS_Store

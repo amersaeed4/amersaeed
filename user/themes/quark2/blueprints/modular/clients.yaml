@@ -1,0 +1,25 @@
+title: Clients
+'@extends': default
+
+form:
+  fields:
+    tabs:
+      fields:
+        clients:
+          type: tab
+          title: Clients
+          fields:
+            header.clients:
+              name: clients
+              type: list
+              label: Clients
+              style: vertical
+              collapsed: true
+
+              fields:
+                .name:
+                  type: text
+                  label: Name
+                .industry:
+                  type: text
+                  label: Industry

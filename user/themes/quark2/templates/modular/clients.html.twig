@@ -1,0 +1,16 @@
+<section class="section modular-clients">
+    <div class="container">
+        <div class="frame-box">
+            {{ content|raw }}
+
+            <div class="clients-grid">
+            {% for client in page.header.clients %}
+                <div class="client-card">
+                    <h6>{{ client.name }}</h6>
+                    {% if client.industry %}<span class="client-industry">{{ client.industry }}</span>{% endif %}
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
