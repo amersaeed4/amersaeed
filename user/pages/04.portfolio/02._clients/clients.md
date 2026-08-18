@@ -86,13 +86,16 @@ clients:
         name: 'Vanadium Law School'
         industry: Education
     -
+        name: 'Quetta Gladiator'
+        industry: 'Cricket Franchise Pakistan'
+    -
         name: 'Well Life Pharmacy'
         industry: 'Pharmacy & Healthcare'
     -
         name: 'West Point Trading LLC'
         industry: 'Trading — UAE'
     -
-        name: 'Wow Price KSA'
+        name: 'Wow Price'
         industry: 'Retail — Saudi Arabia'
     -
         name: 'Al Ajam Company'
@@ -115,6 +118,9 @@ clients:
     -
         name: 'Omar Hospital'
         industry: Healthcare
+    -
+        name: 'Peshawar Zalmi'
+        industry: 'Cricket Franchise Pakistan'
 ---
 
 ## A Few of Our Leading Clients
