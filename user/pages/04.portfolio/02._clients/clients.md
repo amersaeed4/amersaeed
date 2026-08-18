@@ -20,6 +20,9 @@ clients:
         name: Hotchaa
         industry: 'Food & Beverage'
     -
+        name: FAKT
+        industry: 'Trade Exhibition and Conference Organizers'
+    -
         name: KaffeKos
         industry: 'Food & Beverage'
     -
@@ -40,6 +43,15 @@ clients:
     -
         name: 'Premium Solutions'
         industry: 'Utilities & Energy'
+    -
+        name: 'Pakistan Society of Interventional Cardiology'
+        industry: Healthcare
+    -
+        name: 'ESPN Machinery'
+        industry: 'Vibrohammer Marketplace, UAE'
+    -
+        name: 'Getz Pharma'
+        industry: Healthcare
     -
         name: 'Qaiser Brothers'
         industry: 'Industrial Distribution'
