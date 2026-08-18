@@ -123,6 +123,6 @@ clients:
         industry: 'Cricket Franchise Pakistan'
 ---
 
-## A Few of Our Leading Clients
+## A Few of My Leading Clients
 
-<p class="lead">Trusted across Pakistan, Saudi Arabia, the UAE, and China — a snapshot of the 200+ Odoo ERP implementations delivered to date.</p>
+<p class="lead">Trusted across Pakistan, Saudi Arabia, the UAE, and China — a snapshot of 5,000+ client and 200+ Odoo ERP implementations delivered to date.</p>
