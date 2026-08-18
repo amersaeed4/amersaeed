@@ -102,7 +102,7 @@
                         {% include 'partials/social-links.html.twig' %}
                         {% include 'partials/theme-toggle.html.twig' %}
                         {% if config.plugins.login.enabled and grav.user.username %}
-                            <span class="login-status-wrapper"><i class="fa-solid fa-user" aria-hidden="true"></i> {% include 'partials/login-status.html.twig' ignore missing %}</span>
+                            {% include 'partials/login-status.html.twig' ignore missing %}
                         {% endif %}
                     </div>
                 </nav>
@@ -137,6 +137,18 @@
     {% block footer %}
         {% include 'partials/footer.html.twig' %}
     {% endblock %}
+
+    {% set can_edit_pages = grav.user.authorize('admin.super') or grav.user.authorize('api.super') or grav.user.authorize('api.pages.write') %}
+    {% if config.plugins.login.enabled and grav.user.username and can_edit_pages %}
+    {# Floating "edit this page" shortcut for logged-in editors — jumps
+       straight into Admin's editor for the page currently being viewed. #}
+    <a class="edit-page-fab"
+       href="{{ config.plugins.admin2.route|default('/admin') }}/pages{{ page.rawRoute }}"
+       title="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}"
+       aria-label="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}">
+        <i class="fa-solid fa-pen" aria-hidden="true"></i>
+    </a>
+    {% endif %}
 
     {% block mobile %}
     <div class="mobile-container">

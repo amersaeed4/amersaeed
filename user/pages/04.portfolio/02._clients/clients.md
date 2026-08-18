@@ -1,54 +1,84 @@
 ---
 title: Clients
 clients:
-  - name: 'Bukhari and Co'
-    industry: 'Finance & Legal Services'
-  - name: 'Cancer Care Hospital & Research Center'
-    industry: 'Healthcare'
-  - name: 'Dandot Cement Company Limited'
-    industry: 'Manufacturing — Cement'
-  - name: 'Eco Guard'
-    industry: 'Utilities & Energy'
-  - name: 'Green T&D Private Limited'
-    industry: 'Engineering & Trading'
-  - name: 'Hotchaa'
-    industry: 'Food & Beverage'
-  - name: 'KaffeKos'
-    industry: 'Food & Beverage'
-  - name: 'Khawaja Adeel Electronics'
-    industry: 'Electronics Retail'
-  - name: 'M Aslam Plastic'
-    industry: 'Manufacturing'
-  - name: 'MAK Tiles'
-    industry: 'Manufacturing & Retail'
-  - name: 'National Corporation'
-    industry: 'Steel Trading'
-  - name: 'Pest Patrol'
-    industry: 'Pest Control Services'
-  - name: 'Premium Solutions'
-    industry: 'Utilities & Energy'
-  - name: 'Qaiser Brothers'
-    industry: 'Industrial Distribution'
-  - name: 'RedTag Pvt Ltd'
-    industry: 'IT & Marketing'
-  - name: 'SepCon Group'
-    industry: 'Engineering'
-  - name: 'Shenzhen Ayyan Technology Co. Ltd'
-    industry: 'Technology — China'
-  - name: 'Trade Ventures Limited'
-    industry: 'Trading'
-  - name: 'Urban Pest Management (UPM)'
-    industry: 'Pest Control Services'
-  - name: 'Vanadium Law School'
-    industry: 'Education'
-  - name: 'Well Life Pharmacy'
-    industry: 'Pharmacy & Healthcare'
-  - name: 'West Point Trading LLC'
-    industry: 'Trading — UAE'
-  - name: 'Wow Price KSA'
-    industry: 'Retail — Saudi Arabia'
-  - name: 'Al Ajam Company'
-    industry: 'Food & Beverage — Saudi Arabia'
+    -
+        name: 'Bukhari and Co'
+        industry: 'Finance & Legal Services'
+    -
+        name: 'Cancer Care Hospital & Research Center'
+        industry: Healthcare
+    -
+        name: 'Dandot Cement Company Limited'
+        industry: 'Manufacturing — Cement'
+    -
+        name: 'Eco Guard'
+        industry: 'Utilities & Energy'
+    -
+        name: 'Green T&D Private Limited'
+        industry: 'Engineering & Trading'
+    -
+        name: Hotchaa
+        industry: 'Food & Beverage'
+    -
+        name: KaffeKos
+        industry: 'Food & Beverage'
+    -
+        name: 'Khawaja Adeel Electronics'
+        industry: 'Electronics Retail'
+    -
+        name: 'M Aslam Plastic'
+        industry: Manufacturing
+    -
+        name: 'MAK Tiles'
+        industry: 'Manufacturing & Retail'
+    -
+        name: 'National Corporation'
+        industry: 'Steel Trading'
+    -
+        name: 'Pest Patrol'
+        industry: 'Pest Control Services'
+    -
+        name: 'Premium Solutions'
+        industry: 'Utilities & Energy'
+    -
+        name: 'Qaiser Brothers'
+        industry: 'Industrial Distribution'
+    -
+        name: 'RedTag Pvt Ltd'
+        industry: 'IT & Marketing'
+    -
+        name: 'SepCon Group'
+        industry: Engineering
+    -
+        name: 'Shenzhen Ayyan Technology Co. Ltd'
+        industry: 'Technology — China'
+    -
+        name: 'Sustainable Property Co.'
+        industry: 'Property, Rental and Facility Management, Saudi'
+    -
+        name: 'Sustainable Solutions Co.'
+        industry: 'Property and Rental, Saudi'
+    -
+        name: 'Trade Ventures Limited'
+        industry: Trading
+    -
+        name: 'Urban Pest Management (UPM)'
+        industry: 'Pest Control Services'
+    -
+        name: 'Vanadium Law School'
+        industry: Education
+    -
+        name: 'Well Life Pharmacy'
+        industry: 'Pharmacy & Healthcare'
+    -
+        name: 'West Point Trading LLC'
+        industry: 'Trading — UAE'
+    -
+        name: 'Wow Price KSA'
+        industry: 'Retail — Saudi Arabia'
+    -
+        name: 'Al Ajam Company'
+        industry: 'Food & Beverage — Saudi Arabia'
 ---
 
 ## A Few of Our Leading Clients

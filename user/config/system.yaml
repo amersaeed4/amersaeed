@@ -1,6 +1,16 @@
 home:
   alias: '/home'
 
+session:
+  # Grav runs the Admin panel and the public site as separate logins by
+  # default (a genuinely different session cookie for anything under
+  # /admin), so being signed into Admin normally has no effect on the
+  # front-end at all — which is what silently broke the "edit this page"
+  # button. This site has no separate public/member login, only the admin
+  # account, so there's nothing to keep isolated: merging them just makes
+  # the one login apply everywhere, as expected.
+  split: false
+
 pages:
   theme: quark2
 

@@ -1,0 +1,19 @@
+{# Theme override of the login plugin's own login-status partial.
+   The plugin's version prints "<strong>Full Name</strong>, Logout" as text,
+   which is wide enough to push the desktop nav into wrapping once it's
+   added to an already-full header (social icons + theme toggle). This is a
+   compact icon-button pair instead, matching the social-links styling, with
+   the name moved to a title/aria-label tooltip. #}
+{% if grav.user.authenticated %}
+<span class="login-status-wrapper">
+    <span class="login-status-user" title="{{ 'Logged in as %s'|format(grav.user.fullname ?: grav.user.username)|e('html_attr') }}" aria-label="{{ 'Logged in as %s'|format(grav.user.fullname ?: grav.user.username)|e('html_attr') }}">
+        <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+    </span>
+    <a class="login-status-logout"
+       href="{{ url(uri.addNonce((uri.path)|trim('/') ~ '/task' ~ config.system.param_sep ~ 'login.logout', 'logout-form', 'logout-nonce'))|e }}"
+       title="{{ 'PLUGIN_LOGIN.BTN_LOGOUT'|t }}"
+       aria-label="{{ 'PLUGIN_LOGIN.BTN_LOGOUT'|t }}">
+        <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+    </a>
+</span>
+{% endif %}

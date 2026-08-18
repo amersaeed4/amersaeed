@@ -21,6 +21,33 @@
   transform: translateY(0);
 }
 
+/* ---------- Floating "edit this page" shortcut (logged-in editors only) ---------- */
+.edit-page-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--q2-radius-pill);
+  background: var(--q2-accent);
+  color: var(--q2-accent-contrast);
+  font-size: 1rem;
+  text-decoration: none;
+  box-shadow: var(--q2-shadow-raised);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.edit-page-fab:hover {
+  color: var(--q2-accent-contrast);
+  transform: translateY(-2px);
+  box-shadow: var(--q2-shadow-dropdown);
+}
+
 /* ---------- Hero: aurora background (opt-in via `hero-aurora` in hero_classes) ----------
  * Three soft, blurred accent-colour blobs drifting slowly behind the hero
  * content. Sits above the theme's static `.hero::before` texture, below the
@@ -73,11 +100,11 @@
   }
 }
 
-/* Hero: floating triangles (home only). Sits above the aurora glow
+/* Hero: wireframe globe watermark (home only). Sits above the aurora glow
  * (z-index: 0) but below the hero text (`.hero .container` is z-index: 1).
  * Lighter tint of the secondary accent (#714b67) so it reads as a distinct
  * layer rather than a repeat of the primary accent used for the glow and
- * buttons. Each spins independently for an organic, non-mechanical feel. */
+ * buttons. */
 .hero-network {
   position: absolute;
   inset: 0;
@@ -85,39 +112,52 @@
   height: 100%;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.85;
+  opacity: 0.5;
 }
-.hero-network__triangle {
+.hero-globe {
+  animation: hero-globe-spin 140s linear infinite;
+}
+.hero-globe__ring {
   fill: none;
   stroke: color-mix(in oklab, #714b67 45%, white 55%);
-  stroke-width: 0.35;
-  stroke-linejoin: round;
-  opacity: 0.6;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: hero-network-triangle-spin 50s linear infinite;
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
 }
-.hero-network__triangle--2 {
-  animation-duration: 38s;
-  animation-direction: reverse;
+.hero-globe__marker {
+  fill: color-mix(in oklab, #714b67 65%, white 35%);
+  filter: drop-shadow(0 0 0.8px #714b67);
+  animation: hero-globe-marker-pulse 3.2s ease-in-out infinite;
 }
-.hero-network__triangle--3 {
-  animation-duration: 60s;
+.hero-globe__marker--2 {
+  animation-delay: 0.8s;
 }
-.hero-network__triangle--4 {
-  animation-duration: 44s;
-  animation-direction: reverse;
+.hero-globe__marker--3 {
+  animation-delay: 1.6s;
 }
-.hero-network__triangle--5 {
-  animation-duration: 33s;
+.hero-globe__marker--4 {
+  animation-delay: 2.4s;
 }
-@keyframes hero-network-triangle-spin {
+@keyframes hero-globe-spin {
   to {
     transform: rotate(360deg);
   }
 }
+@keyframes hero-globe-marker-pulse {
+  0%,
+  100% {
+    r: 0.5;
+    opacity: 0.6;
+  }
+  50% {
+    r: 0.8;
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .hero-network__triangle {
+  .hero-globe {
+    animation: none;
+  }
+  .hero-globe__marker {
     animation: none;
   }
 }
@@ -208,6 +248,39 @@
 /* ---------- Nav: text logo fallback ---------- */
 .navbar-brand-text {
   white-space: nowrap;
+}
+
+/* ---------- Login status (compact icon-button pair, header only) ----------
+ * Overrides the login plugin's own "<strong>Full Name</strong>, Logout" text,
+ * which was wide enough on its own to push the nav into wrapping once the
+ * header also carries social icons + the theme toggle. */
+.login-status-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.login-status-user,
+.login-status-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--q2-radius-pill);
+  color: var(--q2-text-muted);
+  background: var(--q2-bg-muted);
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+.login-status-logout:hover {
+  color: var(--q2-accent-contrast);
+  background: var(--q2-accent);
+  transform: translateY(-1px);
+  text-decoration: none;
 }
 
 /* ---------- Social icon row (header, mobile overlay, footer) ---------- */
