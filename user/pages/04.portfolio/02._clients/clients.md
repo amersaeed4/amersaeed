@@ -56,11 +56,17 @@ clients:
         name: 'Qaiser Brothers'
         industry: 'Industrial Distribution'
     -
+        name: 'Haier Pakistan'
+        industry: 'Home Appliances'
+    -
         name: 'RedTag Pvt Ltd'
         industry: 'IT & Marketing'
     -
         name: 'SepCon Group'
         industry: Engineering
+    -
+        name: '360 Space LLC'
+        industry: 'Property & Real Estate, UAE'
     -
         name: 'Shenzhen Ayyan Technology Co. Ltd'
         industry: 'Technology — China'
@@ -91,6 +97,24 @@ clients:
     -
         name: 'Al Ajam Company'
         industry: 'Food & Beverage — Saudi Arabia'
+    -
+        name: 'Age Less Medicine'
+        industry: Healthcare
+    -
+        name: 'All Pakistan Marble Association'
+        industry: 'Marble Association'
+    -
+        name: 'MidCity Hospital'
+        industry: Healtcare
+    -
+        name: 'Birth Defect Foundation'
+        industry: 'Non-Governmental Organization '
+    -
+        name: BioSorin
+        industry: 'Clinical Diagnostics'
+    -
+        name: 'Omar Hospital'
+        industry: Healthcare
 ---
 
 ## A Few of Our Leading Clients
