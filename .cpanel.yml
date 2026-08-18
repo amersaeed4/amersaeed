@@ -3,3 +3,5 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/amersaeve/public_html/amersaeed.com/
     - /usr/bin/rsync -a --exclude=".git" --exclude=".gitignore" --exclude=".cpanel.yml" --exclude="cache/" --exclude="logs/" --exclude="tmp/" --exclude="backup/" --exclude="user/accounts/" --exclude="user/data/" ./ $DEPLOYPATH
+    - /usr/bin/find $DEPLOYPATH -type d -exec chmod 755 {} \;
+    - /usr/bin/find $DEPLOYPATH -type f -exec chmod 644 {} \;
