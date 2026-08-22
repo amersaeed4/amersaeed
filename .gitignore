@@ -8,8 +8,11 @@
 /backup/*
 !/backup/.gitkeep
 
-# Dependencies — reinstall with `composer install`
-/vendor/
+# Dependencies — committed rather than reinstalled. Grav core depends on
+# getgrav/Twig, a fork pinned to a specific dev commit (not a published
+# release), so "just run composer install on the server" isn't reliable —
+# it has to be the exact same vendor/ this was tested against locally.
+# /vendor/
 
 # Credentials — admin password hash, API keys, etc. Never commit these.
 /user/accounts/*
