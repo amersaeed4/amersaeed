@@ -13,6 +13,10 @@ testimonials:
     name: 'Omar Dar'
     role: 'Project Manager'
     company: 'Dandot Cement Company Limited'
+  - quote: 'OdoCore brought together CRM, sales, accounting, HR, and field services into one unified Odoo platform for our entire group — with UAE-compliant payroll and automated commissions built right in. A truly comprehensive implementation, delivered by a team that understood our business.'
+    name: 'Malik Tallal'
+    role: 'Project Manager'
+    company: 'Flylight Group'
 ---
 
 ## In Their Words
