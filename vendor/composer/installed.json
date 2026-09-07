@@ -4263,12 +4263,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/getgrav/Twig.git",
-                "reference": "24d7a0e821cf573496d99e05d6bd9d1a42f822c7"
+                "reference": "a316e7423bbf6fb65b32cc471e5262ff21a0d872"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/getgrav/Twig/zipball/24d7a0e821cf573496d99e05d6bd9d1a42f822c7",
-                "reference": "24d7a0e821cf573496d99e05d6bd9d1a42f822c7",
+                "url": "https://api.github.com/repos/getgrav/Twig/zipball/a316e7423bbf6fb65b32cc471e5262ff21a0d872",
+                "reference": "a316e7423bbf6fb65b32cc471e5262ff21a0d872",
                 "shasum": ""
             },
             "require": {
@@ -4283,7 +4283,7 @@
                 "psr/container": "^1.0|^2.0",
                 "symfony/phpunit-bridge": "^5.4.9|^6.4|^7.0"
             },
-            "time": "2026-05-20T12:11:09+00:00",
+            "time": "2026-08-22T09:14:45+00:00",
             "default-branch": true,
             "type": "library",
             "installation-source": "dist",

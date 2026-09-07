@@ -1,3 +1,17 @@
+# v1.4.11
+## 09/02/2026
+
+1. [](#bugfix)
+    * A Flex directory whose list columns point at nested values, such as `header.title`, now shows those values instead of an empty cell in every row. Thanks to @Rbau30 [#237](https://github.com/trilbymedia/grav-plugin-flex-objects/issues/237)
+
+# v1.4.10
+## 08/21/2026
+
+1. [](#bugfix)
+    * [security] The Flex export endpoint now requires the directory's `read` permission instead of `list`, and only exports directories whose blueprint enables export, so a list-only credential can no longer dump every field of every record and directories that never offered export (accounts, groups, pages) are no longer exportable.
+    * The After Save control now offers all three choices whatever the configured default is, so a directory blueprint can set "Edit Item" as its default without the "Create New" option disappearing ([#160](https://github.com/getgrav/grav-plugin-admin2/issues/160)).
+    * The After Save control's heading and choices are now translated instead of always showing English.
+
 # v1.4.9
 ## 08/11/2026
 

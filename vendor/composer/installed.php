@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'getgrav/grav',
-        'pretty_version' => '2.0.19',
-        'version' => '2.0.19.0',
-        'reference' => '25f37b9c0b1654935adfc737a9b6f44eb8c5947c',
+        'pretty_version' => '2.0.24',
+        'version' => '2.0.24.0',
+        'reference' => '3a32db99b863af2e12c04ea7406e14d622049c58',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -110,9 +110,9 @@
             'dev_requirement' => false,
         ),
         'getgrav/grav' => array(
-            'pretty_version' => '2.0.19',
-            'version' => '2.0.19.0',
-            'reference' => '25f37b9c0b1654935adfc737a9b6f44eb8c5947c',
+            'pretty_version' => '2.0.24',
+            'version' => '2.0.24.0',
+            'reference' => '3a32db99b863af2e12c04ea7406e14d622049c58',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -677,7 +677,7 @@
         'twig/twig' => array(
             'pretty_version' => '3.x-dev',
             'version' => '3.9999999.9999999.9999999-dev',
-            'reference' => '24d7a0e821cf573496d99e05d6bd9d1a42f822c7',
+            'reference' => 'a316e7423bbf6fb65b32cc471e5262ff21a0d872',
             'type' => 'library',
             'install_path' => __DIR__ . '/../twig/twig',
             'aliases' => array(),

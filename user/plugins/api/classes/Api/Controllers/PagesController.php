@@ -744,7 +744,9 @@ class PagesController extends AbstractApiController
             // Template change requires renaming the page file (e.g. default.md → post.md)
             $templateChanged = false;
             $oldFilePath = null;
+            $previousTemplate = null;
             if (array_key_exists('template', $body) && $body['template'] !== $page->template()) {
+                $previousTemplate = $page->template();
                 // The page FILENAME is the template basename only. For modular
                 // modules Grav's template() returns a `modular/<name>` form, so
                 // feeding that straight into name()/the old path would write
@@ -794,7 +796,16 @@ class PagesController extends AbstractApiController
             $this->clearPagesCache();
 
             $this->fireAdminEvent('onAdminAfterSave', ['object' => $page, 'page' => $page]);
-            $this->fireEvent('onApiPageUpdated', ['page' => $page]);
+            // `previous_template` is only present when the template actually
+            // changed. Anything keyed on a page's template - the sync plugin's
+            // collaboration rooms, for one - cannot work out what the page used to
+            // be from the saved page alone, and would otherwise leave whatever it
+            // had built against the old one stranded.
+            $updatedEvent = ['page' => $page];
+            if ($templateChanged) {
+                $updatedEvent['previous_template'] = $previousTemplate;
+            }
+            $this->fireEvent('onApiPageUpdated', $updatedEvent);
 
             $data = $this->serializer->serialize($page);
             // ETag from the page state alone — see show() for why the caller's
@@ -926,9 +937,11 @@ class PagesController extends AbstractApiController
 
         $this->authorizePageAction($request, $newParent, 'create', self::PERMISSION_WRITE);
 
-        // Build new directory name
+        // Build new directory name, keeping the width the folder already uses so a
+        // site on a non-default `system.pages.order_digits` is not silently renumbered.
+        $digits = PageOrdering::digitsFromFolder(basename($page->path() ?? '')) ?? PageOrdering::defaultDigits();
         $dirName = $newOrder !== null
-            ? str_pad((string) $newOrder, 2, '0', STR_PAD_LEFT) . '.' . $newSlug
+            ? str_pad((string) $newOrder, $digits, '0', STR_PAD_LEFT) . '.' . $newSlug
             : $newSlug;
 
         $oldPath = $page->path();
@@ -1941,8 +1954,11 @@ class PagesController extends AbstractApiController
                 $position = $op['position'];
                 $destParentPath = $op['newParentPath'];
 
+                // Keep the width the folder already used — the temp name carries no
+                // prefix, so the original path is what to read it from.
+                $digits = PageOrdering::digitsFromFolder(basename($op['oldPath'])) ?? PageOrdering::defaultDigits();
                 $dirName = $position !== null
-                    ? str_pad((string) $position, 2, '0', STR_PAD_LEFT) . '.' . $slug
+                    ? str_pad((string) $position, $digits, '0', STR_PAD_LEFT) . '.' . $slug
                     : $slug;
 
                 $finalPath = $destParentPath . '/' . $dirName;

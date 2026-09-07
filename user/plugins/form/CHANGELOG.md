@@ -1,3 +1,21 @@
+# v9.1.24
+## 08/27/2026
+
+1. [](#bugfix)
+    * The Cloudflare Turnstile site key and secret key settings now link to Cloudflare's documentation instead of Google's reCAPTCHA docs [#641](https://github.com/getgrav/grav-plugin-form/issues/641)
+
+# v9.1.23
+## 08/22/2026
+
+1. [](#improved)
+    * The base field template no longer wraps the whole file in a condition, so forms keep working on the next major version of Twig, which only allows a template to say what it extends at the very top
+
+# v9.1.22
+## 08/21/2026
+
+1. [](#bugfix)
+    * [security] A form defined on a page restricted by an `access:` rule, or on an unpublished page, can no longer be submitted from a different page by someone who could not reach that page in the first place ([GHSA-33m4-m988-5fvh](https://github.com/getgrav/grav-plugin-form/security/advisories/GHSA-33m4-m988-5fvh)).
+
 # v9.1.21
 ## 08/15/2026
 

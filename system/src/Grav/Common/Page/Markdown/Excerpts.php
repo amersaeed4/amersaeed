@@ -10,6 +10,7 @@
 namespace Grav\Common\Page\Markdown;
 
 use Grav\Common\Grav;
+use Grav\Common\Media\Interfaces\ImageMediaInterface;
 use Grav\Common\Page\Interfaces\PageInterface;
 use Grav\Common\Page\Medium\Link;
 use Grav\Common\Page\Pages;
@@ -293,9 +294,27 @@ class Excerpts
                 || Medium::isAllowedAction((string) $action['method'])
         ));
 
+        // `system.images.defaults` is image configuration, so it must only be
+        // applied to image media. Applying it to audio, video or a document
+        // replaced the player or download with a linked thumbnail (`link`) and
+        // pushed the HTML attributes through the medium's `__call()` URL
+        // passthrough, which appended them to the querystring instead.
+        // Individual defaults are also checked against the medium: an SVG or an
+        // animated GIF is an image but has no decoding()/fetchpriority(), and
+        // would leak those the same way. getgrav/grav#4264.
         $defaults = $this->config['images']['defaults'] ?? [];
-        if (count($defaults)) {
+        if (count($defaults) && $medium instanceof ImageMediaInterface) {
+            // An image manipulation such as `resize` is not a real method, it is
+            // dispatched by ImageMediaTrait::__call() off its own allowlist, so ask
+            // for that too. Without it every processing default was silently dropped.
+            // getgrav/grav#4282.
+            $magic = property_exists($medium, 'magic_actions') ? (array) $medium::$magic_actions : [];
+
             foreach ($defaults as $method => $params) {
+                if (!method_exists($medium, (string) $method) && !in_array((string) $method, $magic, true)) {
+                    continue;
+                }
+
                 if (array_search($method, array_column($actions, 'method')) === false) {
                     $actions[] = [
                         'method' => $method,
@@ -338,9 +357,38 @@ class Excerpts
         if (isset($url_parts['scheme'])) {
             /** @var UniformResourceLocator $locator */
             $locator = Grav::instance()['locator'];
+            $is_registered_stream = $locator->schemeExists($url_parts['scheme']);
 
-            // Special handling for the streams.
-            if ($locator->schemeExists($url_parts['scheme'])) {
+            $rebuilt = $url_parts['scheme'] . ':' . ($url_parts['host'] ?? '') . ($url_parts['path'] ?? '');
+
+            if (
+                !$is_registered_stream
+                && strpos($url, '://') === false
+                && (
+                    !preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*$/', $url_parts['scheme'])
+                    || static::isLocalMediaFilename($rebuilt)
+                )
+            ) {
+                // parse_url() misreads a relative filename that merely contains a
+                // literal ':' (e.g. "2025-06-29T13:36:56.png") as a scheme:path
+                // split, because unlike RFC 3986 it allows a "scheme" to start
+                // with a digit. Two things mark such a "scheme" as untrusted, and
+                // either is enough (getgrav/grav#3933):
+                //
+                //   1. It fails RFC 3986 scheme grammar - a real scheme always
+                //      starts with a letter, so "2025-06-29T13" cannot be one.
+                //   2. The whole reference names a file we serve as media, e.g.
+                //      "note:2025.png" or "IMG:001.png". Grammar alone cannot
+                //      separate those from an unknown protocol, but no real
+                //      scheme carries a media extension on its path, whereas an
+                //      editor pasting a colon-named attachment is routine.
+                //
+                // Either way the reference matches no registered stream, so it is
+                // rebuilt as a plain path and resolved against the page's media.
+                $url_parts['path'] = $rebuilt;
+                unset($url_parts['scheme'], $url_parts['host'], $url_parts['port'], $url_parts['user'], $url_parts['pass']);
+            } elseif ($is_registered_stream) {
+                // Special handling for the streams.
                 if (isset($url_parts['host'])) {
                     // Merge host and path into a path.
                     $url_parts['path'] = $url_parts['host'] . (isset($url_parts['path']) ? '/' . $url_parts['path'] : '');
@@ -352,5 +400,34 @@ class Excerpts
         }
 
         return $url_parts;
+    }
+
+    /**
+     * Whether a colon-bearing reference names a file Grav serves as media.
+     *
+     * Used to recognise a filename such as `note:2025.png` that RFC 3986 scheme
+     * grammar cannot distinguish from an unknown protocol, since both are a
+     * letter-led token followed by a colon. Real schemes never carry a media
+     * extension on their path, so the extension is the disambiguator.
+     *
+     * The protocols Grav itself treats as external are excluded outright, so a
+     * `mailto:`/`tel:`/`git:` reference is never reinterpreted as a local file
+     * whatever it happens to end with.
+     *
+     * @param string $candidate Reference rebuilt as a plain path.
+     * @return bool
+     */
+    protected static function isLocalMediaFilename(string $candidate): bool
+    {
+        if (Uri::isExternal($candidate) || str_starts_with($candidate, 'data:')) {
+            return false;
+        }
+
+        $extension = strtolower(Utils::pathinfo($candidate, PATHINFO_EXTENSION) ?: '');
+        if ($extension === '') {
+            return false;
+        }
+
+        return (bool) Grav::instance()['config']->get('media.types.' . $extension);
     }
 }
