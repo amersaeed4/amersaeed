@@ -14,6 +14,7 @@ namespace Twig\Extension;
 use Twig\Environment;
 use Twig\FileExtensionEscapingStrategy;
 use Twig\Node\Expression\ConstantExpression;
+use Twig\Node\Expression\Filter\EscapeFilter;
 use Twig\Node\Expression\Filter\RawFilter;
 use Twig\Node\Node;
 use Twig\NodeVisitor\EscaperNodeVisitor;
@@ -21,6 +22,15 @@ use Twig\Runtime\EscaperRuntime;
 use Twig\TokenParser\AutoEscapeTokenParser;
 use Twig\TwigFilter;
 
+/**
+ * GRAV FORK: not final (upstream made it final in 3.10).
+ *
+ * Grav\Common\Twig\TwigEnvironment::getExtension() returns a subclass of this
+ * that keeps the pre-3.9 EscaperExtension::setEscaper() call site working by
+ * forwarding to EscaperRuntime. That shim checks isFinal() and quietly stops
+ * shimming when the class is final, so restoring "final" here breaks callers
+ * SILENTLY rather than fataling. Pinned by Grav's TwigForkPatchesTest.
+ */
 class EscaperExtension extends AbstractExtension
 {
     private $environment;
@@ -51,8 +61,8 @@ class EscaperExtension extends AbstractExtension
     public function getFilters(): array
     {
         return [
-            new TwigFilter('escape', [EscaperRuntime::class, 'escape'], ['is_safe_callback' => [self::class, 'escapeFilterIsSafe']]),
-            new TwigFilter('e', [EscaperRuntime::class, 'escape'], ['is_safe_callback' => [self::class, 'escapeFilterIsSafe']]),
+            new TwigFilter('escape', [EscaperRuntime::class, 'escape'], ['is_safe_callback' => [self::class, 'escapeFilterIsSafe'], 'node_class' => EscapeFilter::class]),
+            new TwigFilter('e', [EscaperRuntime::class, 'escape'], ['is_safe_callback' => [self::class, 'escapeFilterIsSafe'], 'node_class' => EscapeFilter::class]),
             new TwigFilter('raw', null, ['is_safe' => ['all'], 'node_class' => RawFilter::class]),
         ];
     }

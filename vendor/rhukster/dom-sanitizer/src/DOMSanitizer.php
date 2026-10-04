@@ -18,9 +18,13 @@ class DOMSanitizer
     // Quotes inside url() are optional per CSS Values 4 §4.4, and `data:` is
     // as much a resource load as http:. Requiring a quote here let
     // `url(//evil.example/x)` through on every attribute. (GHSA-jfrr-ch68-f2w9)
-    const EXTERNAL_URL = "/url\s*\(\s*[\"']?\s*(ftp:\/\/|http:\/\/|https:\/\/|\/\/|data:)/i";
-    const JAVASCRIPT_ATTR = "/(\s(?:href|xlink\:href)\s*=\s*\"javascript:.*?\")/i";
-    const SNEAKY_ONLOAD = "/(\s(?:href|xlink\:href)\s*=\s*\"data:.*onload.*?\")/i";
+    const EXTERNAL_URL = "/url\s*\(\s*[\"']?[\\x00-\\x20]*(ftp:\/\/|http:\/\/|https:\/\/|\/\/|data:)/i";
+    const JAVASCRIPT_ATTR = "/(\s(?:href|xlink\:href|action|cite|poster|src|srcset|background)\s*=\s*\"javascript:.*?\")/i";
+    const SNEAKY_ONLOAD = "/(\s(?:href|xlink\:href|action|cite|poster|src|srcset|background)\s*=\s*\"data:.*onload.*?\")/i";
+    // Belt-and-braces for the post-serialization pass: any `data:` URL attribute
+    // whose declared MIME is not an inert image type is stripped, mirroring the
+    // scheme-level policy in isDangerousUrl(). (GHSA-wcj2-r6vg-rm97, GHSA-mrpv-6x26-mf6c)
+    const SNEAKY_DATA_URL = "/(\s(?:href|xlink\:href|action|cite|poster|src|srcset|background)\s*=\s*\"data:(?!image\/(?:png|jpe?g|gif|webp|bmp|x-icon|vnd\.microsoft\.icon)[;,])[^\"]*\")/i";
     const NAMESPACE_TAGS = '/xmlns[^=]*="[^"]*"/i';
     const HTML_TAGS = "~<(?:!DOCTYPE|/?(?:html|body))[^>]*>\s*~i";
     const PHP_TAGS = '/<\?(=|php)(.+?)\?>/i';
@@ -110,6 +114,7 @@ class DOMSanitizer
         $document->preserveWhiteSpace = false;
         $document->strictErrorChecking = false;
         $document->formatOutput = true;
+        $this->sanitizeDocumentNodes($document);
 
         $tags = array_diff($this->allowed_tags, $this->disallowed_tags);
         $attributes = array_diff($this->allowed_attributes, $this->disallowed_attributes);
@@ -120,6 +125,10 @@ class DOMSanitizer
             $tag_name = $element->tagName;
             $tag_name_lower = strtolower($tag_name);
             if(in_array($tag_name_lower, $tags)) {
+                if ($this->hasDangerousAnimationTarget($element)) {
+                    $element->parentNode->removeChild($element);
+                    continue;
+                }
                 if ($tag_name_lower === 'style' && $this->hasDangerousStyleContent($element->textContent)) {
                     $element->parentNode->removeChild($element);
                     continue;
@@ -166,6 +175,54 @@ class DOMSanitizer
         }
 
         return trim($output);
+    }
+
+    /**
+     * XML processing instructions and comments can hide markup that becomes
+     * active when SVG/MathML is embedded in HTML. CDATA has the same risk at
+     * HTML integration points, so preserve its content as escaped text instead.
+     * Walk all nodes, including siblings of the document element; the element
+     * allow-list alone never visits these nodes. (GHSA-4hr3-f334-mcr4)
+     */
+    protected function sanitizeDocumentNodes(\DOMNode $node): void
+    {
+        for ($i = $node->childNodes->length; --$i >= 0;) {
+            $child = $node->childNodes->item($i);
+            if ($child->nodeType === XML_PI_NODE || $child->nodeType === XML_COMMENT_NODE) {
+                $node->removeChild($child);
+            } elseif ($child->nodeType === XML_CDATA_SECTION_NODE) {
+                $node->replaceChild($child->ownerDocument->createTextNode($child->nodeValue), $child);
+            } elseif ($child->hasChildNodes()) {
+                $this->sanitizeDocumentNodes($child);
+            }
+        }
+    }
+
+    /**
+     * An animation can recreate a dangerous attribute after sanitization,
+     * even when its static value was removed. WebKit allows animateTransform
+     * to target href, despite the element's name. Reject the whole animation
+     * independently of its values, timing, or tag. (GHSA-7x4f-fj83-6xfw)
+     */
+    protected function hasDangerousAnimationTarget(\DOMElement $element): bool
+    {
+        foreach ($element->attributes as $attribute) {
+            if (strtolower($attribute->localName) !== 'attributename') {
+                continue;
+            }
+
+            // Compare the local target name so xlink:href and namespace aliases
+            // cannot bypass the policy. DOM parsing already decoded entities.
+            $parts = explode(':', strtolower(trim($attribute->value)));
+            $target = end($parts);
+            if (in_array($target, self::URL_ATTRS, true) ||
+                $target === 'style' || $target === 'xmlns' ||
+                $parts[0] === 'xmlns' || strncmp($target, 'on', 2) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -302,12 +359,25 @@ class DOMSanitizer
     /**
      * Determines if the attribute value is an external link
      *
+     * SVG presentation attributes (fill, stroke, filter, clip-path, mask,
+     * marker-*) carry CSS url() values, and a CSS comment or hex escape placed
+     * between `url(` and the scheme defeats a raw regex match while the
+     * browser's CSS tokenizer still decodes it into a live external reference.
+     * The <style>/style paths already normalize before their checks, so the
+     * same normalizer runs here, making every url()-carrying attribute agree.
+     * (GHSA-cjfg-j8jp-5xvc)
+     *
      * @param $attr_value
      * @return bool
      */
     protected function isExternalUrl($attr_value): bool
     {
-        return preg_match(self::EXTERNAL_URL, $attr_value);
+        foreach ($this->cssViews((string) $attr_value) as $css) {
+            if (preg_match(self::EXTERNAL_URL, $css)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -337,9 +407,25 @@ class DOMSanitizer
     }
 
     /**
-     * Determines if an href/xlink:href attribute contains a dangerous URL scheme
-     * (javascript:, data: with script content). Normalizes control characters
-     * before checking to prevent entity-encoding bypasses (CVE-2026-33172 bypass).
+     * URL-bearing attributes whose values must be scheme-validated.
+     *
+     * The allow-lists admit many more URL-valued attributes than hyperlinks:
+     * `action` (forms), `cite` (quotations), and the media attributes `poster`,
+     * `src`, `srcset` and `background`. Restricting the check to href/xlink:href
+     * left `form action="javascript:..."` — a complete, submittable form, since
+     * `form`, `button`/`input` and `type` are all allowed — intact end-to-end.
+     * (GHSA-mrpv-6x26-mf6c)
+     */
+    const URL_ATTRS = ['href', 'xlink:href', 'action', 'cite', 'poster', 'src', 'srcset', 'background'];
+
+    /**
+     * Determines if a URL-bearing attribute contains a dangerous URL scheme
+     * (javascript:, or data: whose declared MIME type is not an inert image).
+     * Normalizes control characters before checking to prevent entity-encoding
+     * bypasses (CVE-2026-33172 bypass), and judges data: URLs by scheme policy
+     * rather than payload content, since Base64 encoding defeats substring
+     * matching (GHSA-wcj2-r6vg-rm97). Applies to every URL-bearing attribute in
+     * the allow-list, not only hyperlinks (GHSA-mrpv-6x26-mf6c).
      *
      * @param string $attr_name
      * @param string $attr_value
@@ -347,7 +433,7 @@ class DOMSanitizer
      */
     protected function isDangerousUrl(string $attr_name, string $attr_value): bool
     {
-        if (!in_array(strtolower($attr_name), ['href', 'xlink:href'])) {
+        if (!in_array(strtolower($attr_name), self::URL_ATTRS, true)) {
             return false;
         }
 
@@ -355,12 +441,33 @@ class DOMSanitizer
         // bypasses via tab, newline, CR, null bytes, or other control chars
         $normalized = preg_replace('/[\x00-\x20]+/', '', $attr_value);
 
-        if (preg_match('/^javascript:/i', $normalized)) {
-            return true;
-        }
+        // srcset carries several candidates ("a.png 1x, javascript:... 2x"); a
+        // scheme hidden in a later candidate must be caught too, so each
+        // comma-separated candidate is judged on its own.
+        $candidates = strtolower($attr_name) === 'srcset' ? explode(',', $normalized) : [$normalized];
 
-        if (preg_match('/^data:.*onload/i', $normalized)) {
-            return true;
+        foreach ($candidates as $candidate) {
+            if (preg_match('/^javascript:/i', $candidate)) {
+                return true;
+            }
+
+            // A data: URL carries an embedded document whose type is declared in the
+            // URL itself, and Base64 encoding hides any dangerous marker (`onload`,
+            // `<script>`, ...) from a substring test, so `data:` cannot be judged by
+            // matching against its content. The old `data:.*onload` heuristic let
+            // `data:text/html;base64,...` through. Policy is therefore scheme-level:
+            // only inert image types are allowed through, everything script-capable
+            // (text/html, image/svg+xml, application/xhtml+xml, ...) is rejected.
+            // (GHSA-wcj2-r6vg-rm97)
+            if (preg_match('/^data:/i', $candidate)) {
+                if (!preg_match('/^data:image\/(?:png|jpe?g|gif|webp|bmp|x-icon|vnd\.microsoft\.icon)[;,]/i', $candidate)) {
+                    return true;
+                }
+
+                if (preg_match('/^data:.*onload/i', $candidate)) {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -379,12 +486,28 @@ class DOMSanitizer
      */
     protected function hasDangerousStyleContent(string $css): bool
     {
-        $normalized = $this->normalizeCss($css);
+        foreach ($this->cssViews($css) as $normalized) {
+            if ($this->hasDangerousCssToken($normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        if (preg_match('/@import\b/i', $normalized)) {
+    /**
+     * Runs the dangerous-token checks against one normalized view of the CSS.
+     *
+     * @param string $normalized
+     * @return bool
+     */
+    protected function hasDangerousCssToken(string $normalized): bool
+    {
+        // No trailing \b: normalizeCss() drops tabs, so `@import<tab>url(x)` arrives
+        // as `@importurl(x)` and still has to match.
+        if (preg_match('/@import/i', $normalized)) {
             return true;
         }
-        if (preg_match('/url\s*\(\s*["\']?\s*' . self::CSS_EXTERNAL_SCHEME . '/i', $normalized)) {
+        if (preg_match('/url\s*\(\s*["\']?[\x00-\x20]*' . self::CSS_EXTERNAL_SCHEME . '/i', $normalized)) {
             return true;
         }
         if (preg_match('/expression\s*\(/i', $normalized)) {
@@ -406,7 +529,7 @@ class DOMSanitizer
      * Off-origin schemes for the CSS string scan, anchored at the start of the
      * string value so `background: "not a url https://x"` in `content` is ignored.
      */
-    const CSS_STRING_EXTERNAL_SCHEME = '~^\s*(?:https?:|ftp:|//|data:)~i';
+    const CSS_STRING_EXTERNAL_SCHEME = '~^[\x00-\x20]*(?:https?:|ftp:|//|data:)~i';
 
     /**
      * Functions that fetch a resource named by a quoted string argument.
@@ -446,12 +569,15 @@ class DOMSanitizer
                         continue;
                     }
                     if ($css[$i] === $quote) {
+                        $i++; // past the closing quote
                         break;
+                    }
+                    if ($css[$i] === "\n") {
+                        break; // an unescaped newline ends the string for the browser too
                     }
                     $value .= $css[$i];
                     $i++;
                 }
-                $i++; // past the closing quote (or EOF)
 
                 if (preg_match(self::CSS_STRING_EXTERNAL_SCHEME, $value)) {
                     foreach ($funcStack as $fn) {
@@ -514,37 +640,99 @@ class DOMSanitizer
      * discards.
      *
      * Order matters:
-     *  1. Comments are removed first. As far as the checks are concerned a
-     *     comment can sit *inside* a token, so leaving them in means every
-     *     token check can be cut in half.
-     *  2. CSS escapes are decoded, so `\68 ttps:` is seen as the scheme it is.
-     *  3. Comments are stripped a second time, because step 2 can *synthesize*
-     *     one: `\2f\2a` decodes to `/*`, which did not exist during step 1.
+     *  1. Line endings are preprocessed as the browser does (`\r\n`, `\r` and
+     *     `\f` become `\n`), so every later step only has one newline to handle.
+     *  2. Comments are removed. As far as the checks are concerned a comment
+     *     can sit *inside* a token, so leaving them in means every token check
+     *     can be cut in half.
+     *  3. CSS escapes are decoded in a single left-to-right pass, so `\68 ttps:`
+     *     is seen as the scheme it is and an escaped backslash can never pair
+     *     up with the character after it. A backslash followed by a newline is a
+     *     line continuation that the browser removes (GHSA-94fv-h7hv-365q).
+     *     A decoded character is never CSS syntax to the browser, so the ones
+     *     the checks treat as syntax are made inert; see decodedCssChar().
+     *  4. Raw tabs are removed, because the URL parser removes them, so
+     *     `"ht<tab>tps://"` is the same URL as `"https://"`.
      *
-     * Whitespace is deliberately left alone. It is equally inert to browsers,
-     * and collapsing it would risk false positives on legitimate multi-line CSS.
+     * Decoding can spell out `/*` (`\2f\2a`), which is never a comment to a
+     * browser but could look like one to a later comment strip. Callers check
+     * both this text and a comment-stripped copy of it; see cssViews().
+     *
+     * Other whitespace is left alone. It is inert to browsers, and collapsing
+     * it would risk false positives on legitimate multi-line CSS.
      *
      * @param string $css
      * @return string
      */
     protected function normalizeCss(string $css): string
     {
+        $css = str_replace(["\r\n", "\r", "\f"], "\n", $css);
         $css = $this->stripCssComments($css);
 
         $css = preg_replace_callback(
-            '/\\\\([0-9a-fA-F]{1,6})[ \t\n\r\f]?/',
+            '/\\\\(?:(\n)|([0-9a-fA-F]{1,6})[ \t\n]?|(.))/s',
             function ($m) {
-                $code = hexdec($m[1]);
-                if ($code <= 0 || $code > 0x10FFFF) {
+                if (($m[1] ?? '') !== '') {
                     return '';
                 }
-                return mb_chr($code, 'UTF-8') ?: '';
+                if (($m[2] ?? '') !== '') {
+                    $code = hexdec($m[2]);
+                    $char = ($code > 0 && $code <= 0x10FFFF) ? mb_chr($code, 'UTF-8') : false;
+                    return $this->decodedCssChar($char === false ? "\u{FFFD}" : $char);
+                }
+                return $this->decodedCssChar($m[3]);
             },
             $css
         ) ?? $css;
-        $css = preg_replace('/\\\\([^0-9a-fA-F\r\n\f])/', '$1', $css) ?? $css;
 
-        return $this->stripCssComments($css);
+        return str_replace("\t", '', $css);
+    }
+
+    /**
+     * Maps a character produced by a CSS escape to what the checks should see.
+     *
+     * To the browser an escaped character is always part of an identifier,
+     * string or URL, never syntax. The checks walk quotes, parens and
+     * declaration punctuation, so a decoded `"` or `;` left as is would end a
+     * string or a declaration the browser never ended, and hide what follows.
+     * Those become an inert `_`. A decoded backslash becomes `/`, because the
+     * URL parser reads `\` as `/` (`"\\\\evil.example"` is `//evil.example`).
+     * Decoded tab and newlines are dropped, as the URL parser drops them, and
+     * other control characters become a space, as leading ones are trimmed.
+     *
+     * @param string $char
+     * @return string
+     */
+    protected function decodedCssChar(string $char): string
+    {
+        if ($char === '\\') {
+            return '/';
+        }
+        if (strpos("\"'(){};", $char) !== false) {
+            return '_';
+        }
+        if ($char === "\t" || $char === "\n" || $char === "\r") {
+            return '';
+        }
+        if (strlen($char) === 1 && (ord($char) < 0x20 || ord($char) === 0x7F)) {
+            return ' ';
+        }
+        return $char;
+    }
+
+    /**
+     * The views of a CSS value the dangerous-token checks run against: the
+     * normalized text, and the same text with any comment that decoding spelled
+     * out removed. The first is what the browser sees; the second keeps a
+     * decoded `/*` from splitting a token the checks look for.
+     *
+     * @param string $css
+     * @return string[]
+     */
+    protected function cssViews(string $css): array
+    {
+        $normalized = $this->normalizeCss($css);
+        return [$normalized, $this->stripCssComments($normalized)];
     }
 
     /**
@@ -577,7 +765,7 @@ class DOMSanitizer
                     $i += 2;
                     continue;
                 }
-                if ($c === $quote) {
+                if ($c === $quote || $c === "\n") {
                     $quote = null;
                 }
                 $i++;
@@ -617,6 +805,7 @@ class DOMSanitizer
     {
         $output = preg_replace(self::JAVASCRIPT_ATTR, '', $output);
         $output = preg_replace(self::SNEAKY_ONLOAD, '', $output);
+        $output = preg_replace(self::SNEAKY_DATA_URL, '', $output);
         $output = preg_replace(self::HTML_COMMENTS, '', $output);
         return $output;
     }
@@ -684,7 +873,14 @@ class DOMSanitizer
      */
     private static function stripDoctypeAndEntities(string $content): string
     {
-        $content = preg_replace('/<!DOCTYPE\b[^>]*(?:\[[^\]]*\])?[^>]*>/is', '', $content) ?? $content;
+        // Quoted strings are skipped whole, so a `>` or `]` inside an identifier
+        // or entity value can't end the match early, and the internal subset
+        // `[...]` is consumed before the closing `>`.
+        $content = preg_replace(
+            '/<!DOCTYPE\b(?:[^>\["\']++|"[^"]*+"|\'[^\']*+\')*+(?:\[(?:[^\]"\']++|"[^"]*+"|\'[^\']*+\')*+\])?[^>]*+>/is',
+            '',
+            $content
+        ) ?? $content;
         $content = preg_replace('/<!ENTITY\b[^>]*>/i', '', $content) ?? $content;
         return $content;
     }

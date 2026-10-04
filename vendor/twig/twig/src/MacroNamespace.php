@@ -24,8 +24,7 @@ final class MacroNamespace
      */
     public function __construct(
         private Template $template,
-        private array $macros = [],
-        private ?\Closure $importsLoader = null,
+        private array $macros,
     ) {
     }
 
@@ -40,7 +39,13 @@ final class MacroNamespace
             return true;
         }
 
-        return str_starts_with($name, 'macro_') && null !== $this->findDeclaredName(substr($name, \strlen('macro_')), $context);
+        if (!str_starts_with($name, 'macro_') || null === $this->findDeclaredName($bareName = substr($name, \strlen('macro_')), $context)) {
+            return false;
+        }
+
+        trigger_deprecation('twig/twig', '3.29', 'Testing whether the macro "%s" is defined via the "macro_"-prefixed name "%s" is deprecated; pass the bare macro name to "%s" instead.', $bareName, $name, MacroReferenceExpression::class);
+
+        return true;
     }
 
     /**
@@ -48,7 +53,11 @@ final class MacroNamespace
      */
     public function call(string $name, array $arguments, array $context, int $line, Source $source): string|Markup
     {
-        if (null === $macro = $this->resolve($name, $context)) {
+        if (null !== $macro = $this->getDeclared($name)) {
+            return $macro->callLegacy($arguments, $source, $line);
+        }
+
+        if (null === $macro = $this->getParent($context)?->resolve($name, $context)) {
             if (!str_starts_with($name, 'macro_') || null === $macro = $this->resolve($bareName = substr($name, \strlen('macro_')), $context)) {
                 throw new RuntimeError(\sprintf('Macro "%s" is not defined in template "%s".', $name, $this->template->getTemplateName()), $line, $source);
             }
@@ -83,9 +92,13 @@ final class MacroNamespace
 
     private function getDeclared(string $name): ?TwigMacro
     {
+        // GRAV FORK: compile-time source sandboxing, see Template::ensureSecurityCheckedOrHandOver(),
+        // called in place of upstream's ensureSecurityChecked(). A trusted template entered
+        // while the sandbox is on hands its macros over to its fully checked variant.
         if (isset($this->macros[$name])) {
-            $this->template->ensureSecurityChecked();
-            $this->loadImports();
+            if (null !== $template = $this->template->ensureSecurityCheckedOrHandOver()) {
+                return $template->getMacroNamespace()->getDeclared($name);
+            }
 
             return $this->macros[$name];
         }
@@ -94,8 +107,10 @@ final class MacroNamespace
             if (0 === strcasecmp($declaredName, $name)) {
                 trigger_deprecation('twig/twig', '3.29', 'Calling the macro "%s" (defined in template "%s") as "%s" is deprecated; macro names will be case-sensitive in Twig 4.0.', $declaredName, $this->template->getTemplateName(), $name);
 
-                $this->template->ensureSecurityChecked();
-                $this->loadImports();
+                // GRAV FORK: see above.
+                if (null !== $template = $this->template->ensureSecurityCheckedOrHandOver()) {
+                    return $template->getMacroNamespace()->getDeclared($declaredName);
+                }
 
                 return $macro;
             }
@@ -115,23 +130,6 @@ final class MacroNamespace
             if (null === $namespace = $namespace->getParent($context)) {
                 return null;
             }
-        }
-    }
-
-    private function loadImports(): void
-    {
-        if (null === $loader = $this->importsLoader) {
-            return;
-        }
-
-        // clear before loading so that circular imports don't recurse infinitely
-        $this->importsLoader = null;
-        try {
-            $loader();
-        } catch (\Throwable $e) {
-            $this->importsLoader = $loader;
-
-            throw $e;
         }
     }
 

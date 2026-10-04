@@ -1,3 +1,42 @@
+# v1.4.16
+## 09/22/2026
+
+1. [](#new)
+    * The plugin is now available in French. Thanks @Keyskeeper [#244](https://github.com/trilbymedia/grav-plugin-flex-objects/pull/244)
+
+1. [](#bugfix)
+    * Flex directory pages keep their search, sorting and built-in styling on themes that write their scripts and stylesheets into the page head. Both were registered too late to reach those pages, so they now go out with the listing itself. Thanks @onetrev [grav-plugin-form#656](https://github.com/getgrav/grav-plugin-form/issues/656)
+    * The page media field loads jQuery with the rest of the form's scripts on those same themes, and leaves a theme's own copy of jQuery where the theme put it
+
+# v1.4.15
+## 09/13/2026
+
+1. [](#bugfix)
+    * A Flex directory whose blueprint is shipped by a theme no longer goes missing from the frontend and from Admin Next on requests that carry a session cookie. Thanks to @phmg701 [#240](https://github.com/trilbymedia/grav-plugin-flex-objects/issues/240)
+    * Site templates can be kept outside the plugin folder, where a plugin update cannot delete them. The option that does this is now documented and shipped in the plugin's config, and it accepts a list of folders. Thanks to @ttytrekker [#242](https://github.com/trilbymedia/grav-plugin-flex-objects/issues/242)
+
+# v1.4.14
+## 09/10/2026
+
+1. [](#bugfix)
+    * An API key limited to certain Flex directories no longer lists the others or shows records from related directories it wasn't given, even when the account that created it is a super admin
+
+# v1.4.13
+## 09/09/2026
+
+1. [](#new)
+    * Flex directories can now be driven from an MCP client such as grav-mcp or grav-plugin-mcp-server [getgrav/grav-plugin-api#32](https://github.com/getgrav/grav-plugin-api/issues/32)
+    * The plugin ships an `mcp.yaml` manifest, which the API plugin serves at `GET /api/v1/mcp/tools`
+    * Ten `flex_*` tools list directories and their blueprints, list, read, create, update and delete objects, and list and delete object media
+    * Creating or updating an object takes its fields as one `object` argument, because the field names come from each site's blueprints
+    * Requires API plugin 1.0.28 or later
+
+# v1.4.12
+## 09/09/2026
+
+1. [](#improved)
+    * The Security section heading and the "Restrict Page Frontmatter Editing" option now use translation keys instead of hardcoded English, with Spanish included [#239](https://github.com/trilbymedia/grav-plugin-flex-objects/pull/239)
+
 # v1.4.11
 ## 09/02/2026
 

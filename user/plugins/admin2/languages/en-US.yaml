@@ -25,8 +25,11 @@ ICU:
     DELETE: Delete
     DONE: Done
     EDIT: Edit
+    HELP: Help
+    HELP_FOR_LABEL: Help for {label}
     LOADING: Loading...
     NO_CHANGES: No changes to save
+    RETRY: Retry
     SAVE: Save
     SAVING: Saving...
     SEARCH: Search
@@ -51,7 +54,18 @@ ICU:
     SECURITY_CHECK:
       USER_FOLDER_EXPOSED_TITLE: 'Your web server is not applying Grav''s access rules'
       USER_FOLDER_EXPOSED_BODY: 'Your web server is not applying Grav''s recommended access rules, so files in user/ can be reached directly over the web. It is worth tightening up, since some plugins do store data here.'
+      STORAGE_EXPOSED_BODY: 'The web server served test files from directories that should be private. The file types listed below may expose stored submissions, backups or temporary files. Ask your host to block direct access, or move private storage outside the web root.'
       USER_FOLDER_EXPOSED_LEARN_MORE: How to fix this
+      STORAGE_EXPOSED_TITLE: 'Files that should be private can be downloaded from this site'
+      STORAGE_EXPOSED_COUNT: '{n, plural, one {# file type} other {# file types}}'
+      STORAGE_EXPOSED_TMP: 'Test files in tmp/ could be downloaded, while the other folders were blocked. Your server rules probably date from before Grav 2.1.7, which added tmp/ to the list of blocked folders. Add tmp to that list in your .htaccess, or in your nginx, Caddy or IIS configuration, to match the rules Grav ships.'
+      STORAGE_EXPOSED_BY_TYPE: 'Some file types were blocked in these folders while others could be downloaded. That usually means something in front of Grav''s rules, such as nginx serving static files ahead of Apache, answers for common file types like .zip before the rules are checked. Block these folders in that layer''s configuration as well.'
+      STORAGE_EXPOSED_ALL: 'Every test file could be downloaded, so your web server is not applying Grav''s access rules at all. On Apache, check that AllowOverride lets the site''s .htaccess take effect. On nginx, Caddy or IIS, add the security rules from Grav''s webserver-configs folder.'
+      STORAGE_EXPOSED_CDN: 'If the site is behind a CDN such as Cloudflare, purge its cache after fixing this. Copies it already stored stay downloadable until you do.'
+      COLLAPSE: Collapse
+      SHOW_DETAILS: Show details
+      SNOOZE: Snooze
+      SNOOZE_HINT: 'Hide this warning for 24 hours. It comes back sooner if different files are found.'
     DASHBOARD:
       TITLE: Dashboard
       CUSTOMIZE: Customize
@@ -130,6 +144,10 @@ ICU:
       REORDER_LOADING: Still loading the full list — try again in a moment.
       REORDER_LOADING_ALL: Loading every chunk so reorder can affect the whole list…
       NO_MATCH: No pages match your search
+      SEARCH_MATCH_COUNT: '{n, plural, one {# match} other {# matches}} across all pages'
+      SEARCH_SHOWING: Showing {shown} of {total} matches
+      SEARCH_SHOW_MORE: Show more
+      COLUMN_EMPTY: Empty
       HEADER_TITLE: Title
       HEADER_TEMPLATE: Template
       HEADER_STATUS: Status
@@ -139,6 +157,12 @@ ICU:
       DRAFT: Draft
       PUBLISH: Publish
       UNPUBLISH: Unpublish
+      STATUS:
+        SCHEDULED: Scheduled
+        EXPIRED: Expired
+        SCHEDULED_FOR: 'Scheduled to publish on {date}'
+        EXPIRED_ON: 'Unpublished since {date}'
+        TOGGLE_TITLE: '{action} ({status})'
       SORT_ORDER: Order
       SORT_TITLE_AZ: Title A-Z
       SORT_TITLE_ZA: Title Z-A
@@ -194,6 +218,7 @@ ICU:
         CONNECTING_TO_COLLAB: Connecting to collaboration session…
         RESET_TRANSLATION: Reset Translation
         PAGE_PREVIEW: Page Preview
+        PREVIEW_SHOWING_HOST_PAGE: shown in its parent page
         INVALID_YAML_FRONTMATTER: Invalid YAML frontmatter
         INVALID_YAML_FRONTMATTER_FIX_SYNTAX: Invalid YAML frontmatter — fix syntax before saving
         PAGE_SAVED_AND_MOVED: Page saved and moved
@@ -231,6 +256,7 @@ ICU:
         ROOT: <root> /
         PAGE_TEMPLATE: Page Template
         LOADING_TEMPLATES: Loading templates...
+        CHILD_TYPE_HINT: 'The parent page suggests "{template}" for its children. You can still choose a different template.'
         STATUS_HELP: Drafts are saved but not visible on the site until you publish them
         VISIBLE: Visible
         CONTROLS_WHETHER_THIS_PAGE_APPEARS_IN: Controls whether this page appears in navigation menus
@@ -406,6 +432,11 @@ ICU:
       FAILED_TO_LOAD_AVAILABLE_THEMES_FROM_GPM: Failed to load available themes from GPM
       ADD_THEME: Add Theme
       SELECT_A_THEME_TO_VIEW_DETAILS: Select a theme to view details
+    API_CLIENT:
+      INVALID_JSON_TITLE: Unexpected response from the server
+      INVALID_JSON_DETAIL: "The server's reply could not be read because it is not valid JSON. Something on the server may be printing extra output, such as a PHP warning, alongside the API response. The browser console has the details."
+      UNEXPECTED_RESPONSE_TITLE: Unexpected response from the server
+      UNEXPECTED_RESPONSE_DETAIL: The server replied with data in a format this screen does not expect. The browser console has the details.
     API_KEYS_FIELD:
       REVOKE_KEY: Revoke key
       E_G_MY_CLI_TOOL: e.g. My CLI Tool
@@ -522,6 +553,9 @@ ICU:
       NO_NOTIFICATIONS: No notifications
     POPULARITY_WIDGET:
       LAST_14_DAYS: Last 14 days
+      TODAY: Today
+      VIEWS: '{count, plural, one {# view} other {# views}}'
+      CHART_LABEL: Page views per day for the last 14 days
       THIS_WEEK: This Week
       THIS_MONTH: This Month
     RECENT_PAGES_WIDGET:
@@ -571,6 +605,15 @@ ICU:
     FLOATING_WIDGET_LOADER:
       CLOSE_WIDGETS_MENU: Close widgets menu
     MEDIA:
+      FILE_DETAILS:
+        TITLE: File details
+        PATH: Path
+        TYPE: Type
+        SIZE: Size
+        URL: URL
+        MEDIA_PATH: Media path
+        MARKDOWN: Markdown
+        OPEN: Open
       MEDIA_INSPECTOR:
         PREVIOUS_FILE: Previous file
         NEXT_FILE: Next file
@@ -600,10 +643,21 @@ ICU:
         ORDER_SAVE_FAILED: Failed to save the new order
       MEDIA_TOOLBAR:
         SEARCH_MEDIA: Search media...
+        SEARCHING_FOR: 'Search: "{query}"'
         GRID_VIEW: Grid view
         LIST_VIEW: List view
         NEW_FOLDER: New folder
         FOLDER: Folder
+        FILTER_ALL: All
+        FILTER_IMAGES: Images
+        FILTER_VIDEO: Video
+        FILTER_AUDIO: Audio
+        FILTER_DOCS: Docs
+        SORT_NAME: Name
+        SORT_SIZE: Size
+        SORT_DATE: Date
+        SORT_TYPE: Type
+        DELETE_SELECTED: '{count, plural, one {Delete # file} other {Delete # files}}'
       MEDIA_GRAV_ADMIN: Media — Grav Admin
       MANAGE_SITE_WIDE_MEDIA_FILES: Manage site-wide media files
       PAGE_MEDIA:
@@ -900,7 +954,7 @@ ICU:
         LOADING_SCHEDULER: Loading scheduler...
         NOT_ENABLED_FOR_USER: "Not Enabled for user:"
         GRAV_SCHEDULER: Grav Scheduler
-        INFO_BANNER: The scheduler can use either system crontab or webhook triggers to execute commands. Webhooks are recommended for cloud environments. Only advanced users should configure custom jobs. Misconfiguration or abuse can lead to security vulnerabilities.
+        INFO_BANNER: The scheduler can use either system crontab or webhook triggers to execute commands. Webhooks are recommended for cloud environments.
         CRONTAB_INSTRUCTIONS: To enable the Scheduler's functionality, you must add the **Grav Scheduler** to your system's crontab file for the **{user}** user. Run the command above from the terminal to add it automatically. Once saved, refresh this page to see the status.
         WEBHOOK_ALTERNATIVE: Alternatively, install the **scheduler-webhook** plugin to use webhook-based cron firing, which is recommended for cloud environments where system crontab access is not available.
         SECURITY_WARNING: Only advanced users should configure custom scheduler jobs. Incorrect configuration can cause performance issues or security vulnerabilities.
@@ -973,6 +1027,8 @@ ICU:
       TITLE: Configuration
       TITLE_SCROLLED: "Configuration: {scope}"
       LOADING_CONFIGURATION: Loading configuration...
+      FAILED_TO_LOAD_CONFIGURATION: Failed to load configuration.
+      SCOPE_NOT_FOUND: No configuration scope named {scope} was found.
       TWIG_PROFILE:
         LABEL: Twig in Content
         HELP: Choose who can run Twig inside page content. This sets the advanced toggles below.
@@ -1140,6 +1196,10 @@ ICU:
       LIGHT_MODE_LOGO: Light Mode Logo
       USED_ON_LIGHT_BACKGROUNDS: Used on light backgrounds
       DARK_MODE_LOGO: Dark Mode Logo
+      SIDEBAR_LOGO_HEIGHT: Sidebar Logo Height
+      SIDEBAR_LOGO_HEIGHT_DESC: How tall your logo appears at the top of the sidebar.
+      LOGO_HEIGHT_DEFAULT: Default
+      LOGO_HEIGHT_CUSTOM: Custom
       USED_ON_DARK_BACKGROUNDS: Used on dark backgrounds
       APPEARANCE: Appearance
       CUSTOMIZE_THE_LOOK_AND_FEEL_OF_THE_ADMIN: Customize the look and feel of the admin
@@ -1147,6 +1207,11 @@ ICU:
       CHOOSE_BETWEEN_LIGHT_AND_DARK_APPEARANCE: Choose between light and dark appearance
       ACCENT_COLOR: Accent Color
       PRIMARY_COLOR_USED_FOR_BUTTONS_LINKS: Primary color used for buttons, links, and highlights
+      DARK_SHADE: Dark Shade
+      DARK_SHADE_DESC: How dark mode looks. It only takes effect while dark mode is on.
+      DARK_SHADE_GRAPHITE: Graphite
+      DARK_SHADE_ZINC: Onyx
+      DARK_SHADE_MIDNIGHT: Midnight
       SATURATION: Saturation
       CURRENT_COLOR: Color
       COPY_COLOR: Copy this color
@@ -1157,6 +1222,10 @@ ICU:
       FONT_SIZE_NORMAL: Normal
       FONT_SIZE_LARGE: Large
       FONT_SIZE_XLARGE: X-Large
+      HELP_TEXT: Help Text
+      HELP_TEXT_DESC: Where the short explanation for each field goes. In a tooltip, hover the info icon next to a label, or tap it on a phone, to read it.
+      HELP_MODE_INLINE: Below the label
+      HELP_MODE_TOOLTIP: In a tooltip
       DEFAULT_SETTINGS_FOR_THE_PAGE_BROWSER: Default settings for the page browser
       DEFAULT_VIEW: Default View
       HOW_PAGES_ARE_DISPLAYED_BY_DEFAULT: How pages are displayed by default
@@ -1217,8 +1286,10 @@ ICU:
       DEFAULT_APPEARANCE: Default Appearance
       DEFAULT_COLOR_APPEARANCE_DESC: Default color appearance for new users.
       DEFAULT_PRIMARY_COLOR_DESC: Default primary color for buttons, links, and highlights.
+      DEFAULT_DARK_SHADE_DESC: Default dark shade for new users. It only takes effect while dark mode is on.
       DEFAULT_TYPEFACE_DESC: Default typeface for the admin UI.
       DEFAULT_TEXT_SIZE_DESC: Default text size for the admin UI.
+      DEFAULT_HELP_TEXT_DESC: Default place for field help text for new users, below the label or in a tooltip.
       DEFAULT_PAGES: Default Pages
       DEFAULT_LANGUAGE: Default Language
       DEFAULT_INTERFACE_LANGUAGE_DESC: Default interface language for new users.
@@ -1512,6 +1583,7 @@ ICU:
     WIDGET_HOST:
       UNKNOWN_WIDGET: "Unknown widget: {id}"
     UPDATE_AVAILABLE_VERSION: "Update available: v{version}"
+    UPDATE_CHANGELOG_TITLE: "Changes in v{version}"
     UPDATE_TO_VERSION: Update to v{version}
     2FA_ENABLED: 2FA Enabled
     2FA_SECRET: 2FA Secret
@@ -1649,6 +1721,8 @@ ICU:
     DEBUGGER_CENSORED_HELP: "Clockwork Provider ONLY: If Yes, censor potentially sensitive information (POST parameters, cookies, files, configuration and most array/object data in log messages)"
     DEBUGGER_CLOCKWORK: Clockwork Browser Extension
     DEBUGGER_DEBUGBAR: PHP Debug Bar
+    DEBUGGER_FLEX_RENDER_HINTS: Flex Render Hints
+    DEBUGGER_FLEX_RENDER_HINTS_HELP: Wrap every rendered Flex object and collection in an HTML comment naming it, so the source of a block can be found in the page markup. Only applies to HTML pages
     DEBUGGER_HELP: Enable Grav debugger and following settings
     DEBUGGER_PROVIDER: Debugger Provider
     DEBUGGER_PROVIDER_HELP: Default is PHP Debug Bar, but Clockwork browser extension provides for a less intrusive approach
@@ -1742,6 +1816,14 @@ ICU:
     FORMAT_HELP: short = use the first occurrence of delimiter or size; long = summary delimiter will be ignored
     FRONTMATTER_IGNORE_FIELDS: Ignore frontmatter fields
     FRONTMATTER_IGNORE_FIELDS_HELP: Certain frontmatter fields may contain Twig but should not be processed, such as 'forms'
+    FRONTMATTER_NATIVE_YAML: Fast frontmatter parsing
+    FRONTMATTER_NATIVE_YAML_HELP: Read page frontmatter with the libyaml PHP extension when it is installed, which makes rebuilding the pages cache faster. It reads a few values differently, so check your pages first. An unquoted date stays text instead of becoming a timestamp, and unquoted yes, no, on and off become true or false.
+    PAGES_LAZY_INDEX: Lazy page index
+    PAGES_LAZY_INDEX_HELP: Load pages, routes and taxonomy on demand from a per-page SQLite index instead of one large cache file. Auto uses it on sites with 1,000 pages or more. Falls back to the classic cache when no database engine is available.
+    SESSION_LAZY: Start sessions only when needed
+    SESSION_LAZY_HELP: Visitors without a session cookie get a session only when something is stored in it, such as a login, a form or a message, so anonymous page views can be cached by a proxy or CDN. Plugins that store data on every page view still start one.
+    CACHE_MODULES: Cache module output
+    CACHE_MODULES_HELP: Cache the rendered output of this page's modules. Use it only when the modules show the same content to every visitor. Modules with their own Twig or a form, logged-in visitors and form submissions are always rendered fresh. Editing only a partial template needs a cache clear.
     FRONTMATTER_PROCESS_TWIG: Process frontmatter Twig
     FRONTMATTER_PROCESS_TWIG_HELP: When enabled you can use Twig config variables in page front matter
     FULL_NAME: Full name
@@ -1897,6 +1979,19 @@ ICU:
     PAGE_INHERIT_PERMISSIONS_HELP: Inherit ACL from parent page.
     PAGE_MEDIA: Page Media
     PAGE_SUMMARY: Page Summary
+    MARKDOWN_OUTPUT: Markdown Output
+    MARKDOWN_OUTPUT_ENABLED: Serve Pages as Markdown
+    MARKDOWN_OUTPUT_ENABLED_HELP: Any page can be fetched as Markdown by adding `.md` to its URL, or by sending an `Accept:&nbsp;text/markdown` request header. Built for AI agents and other text clients. The page is rendered through the theme, reduced to its main content region and converted, so listings, shops and modular pages read the way they display.
+    MARKDOWN_OUTPUT_FRONTMATTER: Frontmatter Block
+    MARKDOWN_OUTPUT_FRONTMATTER_HELP: Start the Markdown with a YAML block holding the title, URL, date, description and taxonomy.
+    MARKDOWN_OUTPUT_LINKS: Navigation Links
+    MARKDOWN_OUTPUT_LINKS_HELP: End the Markdown with links to the parent, neighbouring and child pages, so an agent can walk the site without leaving Markdown.
+    MARKDOWN_OUTPUT_MAX_LINKS: Most Child Links
+    MARKDOWN_OUTPUT_MAX_LINKS_HELP: The most child pages listed in the navigation section. Zero lists them all.
+    MARKDOWN_OUTPUT_ABSOLUTE_URLS: Absolute URLs
+    MARKDOWN_OUTPUT_ABSOLUTE_URLS_HELP: Turn root-relative links and images into full URLs, so they still work once the Markdown has left the site.
+    MARKDOWN_OUTPUT_TOKEN_HEADER: Token Count Header
+    MARKDOWN_OUTPUT_TOKEN_HEADER_HELP: Send an `X-Markdown-Tokens` response header with an estimated token count, the same header Cloudflare's Markdown for Agents uses.
     PAGE_TYPES: Page Types
     PAGE_TYPES_HELP: Determines the page types that Grav supports and the order determines which type to fall back to if the request is ambiguous
     PAGE_VISIBILITY_REQUIRES_ACCESS: Menu Visibility Requires Access
@@ -2187,6 +2282,17 @@ ICU:
     TWIG_CONTENT_EDITOR_ENABLED_HELP: "When off (default), the Twig checkbox in the page editor's Advanced tab is only visible to users granted the <code>admin.pages_twig</code> permission, and pages that already have Twig enabled can only be edited by those users. When on, anyone with page-edit access can toggle Twig on individual pages."
     TWIG_CONTENT_CONFIG_ACCESS: Allow config variable access in Twig
     TWIG_CONTENT_CONFIG_ACCESS_HELP: "Whether the <code>config</code> Twig variable is readable from page content. When off (default), reading <code>config.system.title</code> from a page returns nothing. When on, <code>config</code> is exposed but still filtered by <code>config_denied_paths</code> (see Twig Sandbox below) so credentials and other sensitive subtrees stay hidden."
+    GRAV_UPGRADE:
+      CONFIRM_TITLE: "Upgrade Grav core?"
+      CONFIRM_MESSAGE: "This will upgrade Grav from v{current} to v{target}. The site may be briefly unavailable during the upgrade."
+      UPGRADING: "Upgrading Grav to v{version}…"
+      FAILED: "Grav upgrade failed: {detail}"
+      NO_DETAIL: "the server gave no reason"
+      PREFLIGHT_TITLE: "Grav can't upgrade to v{version} yet"
+      PREFLIGHT_MESSAGE: "The checks that run before an upgrade stopped it for these reasons. Fix them and try again, or upgrade anyway if you know these plugins and themes work with the new version."
+      INCOMPATIBLE_PACKAGE: "{name} {version} is marked compatible with Grav {compatible}"
+      UPGRADE_ANYWAY: "Upgrade anyway"
+      STILL_BLOCKED: "Grav upgrade is still blocked: {detail}"
     TOASTS:
       CONFIG_SAVED: "{name} configuration saved"
       CONFIG_MODIFIED_ELSEWHERE: Configuration was modified elsewhere — reload to see latest

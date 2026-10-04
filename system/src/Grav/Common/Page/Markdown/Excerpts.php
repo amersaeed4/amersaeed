@@ -195,7 +195,7 @@ class Excerpts
         if (!empty($url_parts['stream'])) {
             $filename = $url_parts['scheme'] . '://' . ($url_parts['path'] ?? '');
 
-            $media = $this->page->getMedia();
+            $media = $this->page->media();
         } else {
             $grav = Grav::instance();
             /** @var Pages $pages */
@@ -212,8 +212,10 @@ class Excerpts
 
                 // Get the local path to page media if possible.
                 if ($this->page && $folder === $this->page->url(false, false, false)) {
-                    // Get the media objects for this page.
-                    $media = $this->page->getMedia();
+                    // Get the media objects for this page. media() rather than
+                    // getMedia(), because media() is where `pages.media_route_urls`
+                    // gives each file its route URL. getgrav/grav#4298.
+                    $media = $this->page->media();
                 } else {
                     // see if this is an external page to this one
                     $base_url = rtrim($grav['base_url_relative'] . $pages->base(), '/');
@@ -221,7 +223,7 @@ class Excerpts
 
                     $ext_page = $pages->find($page_route, true);
                     if ($ext_page) {
-                        $media = $ext_page->getMedia();
+                        $media = $ext_page->media();
                     } else {
                         $grav->fireEvent('onMediaLocate', new Event(['route' => $page_route, 'media' => &$media]));
                     }
@@ -231,9 +233,10 @@ class Excerpts
 
         // If there is a media file that matches the path referenced..
         if ($media && $filename && isset($media[$filename])) {
-            // Get the medium object.
+            // Work on a copy: the page's medium is shared by every embed of the
+            // file, and actions like the querystring outlive reset().
             /** @var Medium $medium */
-            $medium = $media[$filename];
+            $medium = $media[$filename]->copy();
 
             // Process operations
             $medium = $this->processMediaActions($medium, $url_parts);

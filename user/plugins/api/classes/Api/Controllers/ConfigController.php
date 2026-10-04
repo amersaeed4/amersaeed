@@ -156,9 +156,9 @@ class ConfigController extends AbstractApiController
      * take over. Body: `{"keys": ["pages.theme", ...]}` or `{"reset": true}`.
      *
      * The active layer is the same write target show()/update() resolve from
-     * X-Config-Environment: base `user/config/<scope>.yaml`, or an environment's
-     * `user/env/<env>/config/<scope>.yaml`. Reverting a key there falls back to
-     * the layer beneath (base → core/plugin defaults; env → base).
+     * X-Config-Environment: base `user/config/<scope>.yaml`, or the configured
+     * environment stream's `<env>/config/<scope>.yaml`. Reverting a key there
+     * falls back to the layer beneath (base → core/plugin defaults; env → base).
      */
     public function revert(ServerRequestInterface $request): ResponseInterface
     {
@@ -187,18 +187,26 @@ class ConfigController extends AbstractApiController
 
         $filePath = $this->resolveConfigFile($scope, $targetEnv);
 
+        // Whether anything on disk actually changed. Reverting a layer that has
+        // no file (or keys it doesn't override) is a harmless no-op, but it must
+        // not fire onApiConfigUpdated: webhooks and audit listeners would record
+        // a config change that never happened.
+        $changed = false;
+
         if ($reset) {
             // Nuke the active layer's file entirely → falls back to the parent layer.
             if ($filePath && is_file($filePath)) {
                 unlink($filePath);
+                $changed = true;
             }
         } elseif ($filePath) {
             // The file already IS the persisted delta — drop each requested key,
             // prune empties, and rewrite, or remove the file if nothing remains.
-            $delta = is_file($filePath) ? Yaml::parse((string) file_get_contents($filePath)) : [];
-            if (!is_array($delta)) {
-                $delta = [];
+            $original = is_file($filePath) ? Yaml::parse((string) file_get_contents($filePath)) : [];
+            if (!is_array($original)) {
+                $original = [];
             }
+            $delta = $original;
             $differ = new ConfigDiffer($this->grav);
             foreach ($keys as $key) {
                 if (is_string($key) && $key !== '') {
@@ -208,21 +216,25 @@ class ConfigController extends AbstractApiController
             if ($delta === []) {
                 if (is_file($filePath)) {
                     unlink($filePath);
+                    $changed = true;
                 }
-            } else {
+            } elseif ($delta !== $original) {
                 $dir = dirname($filePath);
                 if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
                     throw new \RuntimeException(sprintf('Unable to create directory "%s"', $dir));
                 }
                 file_put_contents($filePath, Yaml::dump($delta));
+                $changed = true;
             }
         }
 
-        // Refresh in-memory config + clear cache so the next read is correct.
         $effective = $this->effectiveConfig($scope, $targetEnv);
-        $this->config->set($configKey, $effective);
-        $this->grav['cache']->clearCache('standard');
-        $this->fireEvent('onApiConfigUpdated', ['scope' => $scope, 'data' => $effective]);
+        if ($changed) {
+            // Refresh in-memory config + clear cache so the next read is correct.
+            $this->config->set($configKey, $effective);
+            $this->grav['cache']->clearCache('standard');
+            $this->fireEvent('onApiConfigUpdated', ['scope' => $scope, 'data' => $effective]);
+        }
 
         $tags = ['config:update:' . $scope];
         if (str_starts_with($scope, 'plugins/')) {
@@ -232,7 +244,7 @@ class ConfigController extends AbstractApiController
         }
 
         $etag = $this->generateEtag($this->configEtagBasis($scope, $targetEnv));
-        $meta = $this->overrideMeta($scope, $targetEnv);
+        $meta = $this->overrideMeta($scope, $targetEnv) + ['reverted' => $changed];
         return $this->respondWithEtag(
             ConfigSecretMasker::mask($effective, $this->loadBlueprint($scope)),
             200,
@@ -276,7 +288,8 @@ class ConfigController extends AbstractApiController
             throw new NotFoundException("Configuration scope '{$scope}' not found.");
         }
 
-        // Write target: X-Config-Environment selects an existing env folder; empty/default = base.
+        // Write target: X-Config-Environment selects an existing Grav
+        // environment; empty/default = base.
         $targetEnv = $this->resolveTargetEnv($request);
 
         // Edit against the baseline for THIS target, not the live (boot-env)
@@ -468,10 +481,10 @@ class ConfigController extends AbstractApiController
      * Resolve the config file path for a given scope.
      *
      * Writes land in base user/config/ unless $targetEnv is a non-empty string
-     * matching an existing user/env/<env>/ folder. We deliberately avoid the
-     * `config://` stream here because its first resolved path can be an env
-     * folder Grav auto-inferred from the hostname — that would create an
-     * unintended user/<host>/ folder on save.
+     * matching an existing environment resolved by EnvironmentService. We use
+     * the dedicated environment:// stream only for the active environment and
+     * never use the merged config:// stream, whose first path can be a lookup
+     * location rather than the explicit write target.
      */
     private function resolveConfigFile(string $scope, ?string $targetEnv = null): ?string
     {
@@ -609,9 +622,9 @@ class ConfigController extends AbstractApiController
     /**
      * Where config writes land.
      *
-     * Base user/config/ by default. When $targetEnv is set, the matching
-     * user/env/<env>/config/ is used — but only if it already exists, we
-     * never implicitly create env folders.
+     * Base user/config/ by default. When $targetEnv is set, EnvironmentService
+     * resolves the matching Grav environment stream — but only if it already
+     * exists; we never implicitly create environment folders.
      */
     private function resolveWriteDir(?string $targetEnv = null): string
     {

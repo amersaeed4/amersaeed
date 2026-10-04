@@ -12,7 +12,9 @@ use Grav\Plugin\Api\Exceptions\ForbiddenException;
 use Grav\Plugin\Api\Exceptions\TooManyRequestsException;
 use Grav\Plugin\Api\Exceptions\UnauthorizedException;
 use Grav\Plugin\Api\Exceptions\ValidationException;
+use Grav\Plugin\Api\Popularity\PopularityTracker;
 use Grav\Plugin\Api\Response\ApiResponse;
+use Grav\Plugin\Api\Services\PasswordPolicyService;
 use Grav\Plugin\Login\Login;
 use Grav\Plugin\Login\TwoFactorAuth\TwoFactorAuth;
 use Psr\Http\Message\ResponseInterface;
@@ -241,6 +243,9 @@ class AuthController extends AbstractApiController
             $jwt->revokeToken($accessToken);
         }
 
+        // Count this browser's front-end page views again (see ApiRouter).
+        PopularityTracker::sendExcludeCookie(false);
+
         if ($user !== null) {
             $this->fireEvent('onApiUserLogout', [
                 'user' => $user,
@@ -435,6 +440,11 @@ class AuthController extends AbstractApiController
             throw new ValidationException($invalidMessage);
         }
 
+        // The same password policy setup and invite-accept enforce. Checked only
+        // once the link has proven valid, so a policy error never tells a token
+        // prober anything, and the reset token stays usable for a retry.
+        PasswordPolicyService::assertValid($this->config, $password);
+
         // Match the login plugin's reset sequence exactly (Controller::taskReset).
         unset($user->hashed_password, $user->reset);
         $user->password = $password;
@@ -461,14 +471,24 @@ class AuthController extends AbstractApiController
      */
     public function me(ServerRequestInterface $request): ResponseInterface
     {
+        return ApiResponse::create($this->meData($request));
+    }
+
+    /**
+     * The payload of GET /me, shared with GET /admin-next/boot.
+     *
+     * @return array<string, mixed>
+     */
+    public function meData(ServerRequestInterface $request): array
+    {
         $this->requirePermission($request, 'api.access');
 
         $user = $this->getUser($request);
 
-        return ApiResponse::create($this->buildUserProfile($user) + [
+        return $this->buildUserProfile($user) + [
             'grav_version' => GRAV_VERSION,
             'admin_version' => $this->getAdminPluginVersion(),
-        ]);
+        ];
     }
 
     private function getAdminPluginVersion(): ?string

@@ -6,13 +6,9 @@
             <div class="columns">
             {% for feature in page.header.features %}
                 <div class="column">
-                    {% if feature.url %}
-                        {% set is_external = feature.url starts with 'http://' or feature.url starts with 'https://' or feature.url starts with 'mailto:' or feature.url starts with 'tel:' or feature.url starts with '#' %}
-                        {% set feature_href = is_external ? feature.url : base_url ~ feature.url %}
-                        <a href="{{ feature_href }}" style="text-decoration:none;color:inherit;display:block;">
-                    {% endif %}
+                    {% if feature.url %}<a href="{{ feature.url }}" style="text-decoration:none;color:inherit;display:block;">{% endif %}
                     <div class="feature-icon">
-                        {% if feature.icon %}<i class="fa-solid fa-{{ feature.icon }}" aria-hidden="true"></i>{% endif %}
+                        {% if feature.icon %}<i class="{{ feature.icon|fa_icon }}" aria-hidden="true"></i>{% endif %}
                         {% if feature.header %}<h6>{{ feature.header }}</h6>{% endif %}
                     </div>
                     <div class="feature-content">

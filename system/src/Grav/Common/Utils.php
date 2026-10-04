@@ -10,11 +10,13 @@
 namespace Grav\Common;
 
 use DateTime;
+use DateTimeInterface;
 use DateTimeZone;
 use Exception;
 use Grav\Common\Flex\Types\Pages\PageObject;
 use Grav\Common\Helpers\Truncator;
 use Grav\Common\Page\Interfaces\PageInterface;
+use Grav\Common\Page\Markdown\MarkdownOutput;
 use Grav\Common\Markdown\Parsedown;
 use Grav\Common\Markdown\ParsedownExtra;
 use Grav\Common\Page\Markdown\Excerpts;
@@ -929,12 +931,21 @@ abstract class Utils
      */
     public static function getMimeByExtension($extension, $default = 'application/octet-stream')
     {
-        $extension = strtolower($extension);
+        $extension = strtolower((string)$extension);
+        if ($extension === '') {
+            return $default;
+        }
+
+        // A site's own `media.types.<ext>.mime` wins, so the type served for an output
+        // format such as `rss` or `atom` can be changed without a plugin.
+        $media_types = Grav::instance()['config']->get('media.types');
+        $mimetype = $media_types[$extension]['mime'] ?? null;
+        if (is_string($mimetype) && $mimetype !== '') {
+            return $mimetype;
+        }
 
         // look for some standard types
         switch ($extension) {
-            case null:
-                return $default;
             case 'json':
                 return 'application/json';
             case 'html':
@@ -945,11 +956,11 @@ abstract class Utils
                 return 'application/rss+xml';
             case 'xml':
                 return 'application/xml';
+            case MarkdownOutput::FORMAT:
+                return MarkdownOutput::MIME;
         }
 
-        $media_types = Grav::instance()['config']->get('media.types');
-
-        return $media_types[$extension]['mime'] ?? $default;
+        return $default;
     }
 
     /**
@@ -1021,6 +1032,8 @@ abstract class Utils
                 return 'rss';
             case 'application/xml':
                 return 'xml';
+            case MarkdownOutput::MIME:
+                return MarkdownOutput::FORMAT;
         }
 
         $media_types = (array)Grav::instance()['config']->get('media.types');
@@ -1109,8 +1122,14 @@ abstract class Utils
      */
     public static function checkFilename($filename): bool
     {
-        $dangerous_extensions = Grav::instance()['config']->get('security.uploads_dangerous_extensions', []);
-        $extension = mb_strtolower(static::pathinfo($filename, PATHINFO_EXTENSION));
+        // The PHP-executable extensions are always dangerous, even if a site's config drops them.
+        $dangerous_extensions = array_merge(
+            ['php', 'php2', 'php3', 'php4', 'php5', 'php7', 'php8', 'phar', 'phtml', 'pht', 'phtm', 'phps'],
+            array_map('mb_strtolower', (array) Grav::instance()['config']->get('security.uploads_dangerous_extensions', []))
+        );
+        // Check every dot-separated part after the base name, not just the last one: servers that map
+        // handlers with AddHandler run `evil.php.jpg` as PHP.
+        $extensions = array_map('mb_strtolower', array_slice(explode('.', (string) $filename), 1));
 
         return !(
             // Empty filenames are not allowed.
@@ -1126,8 +1145,8 @@ abstract class Utils
             // (GHSA-76qg-8r9h-pxxr). `'` is intentionally allowed — it is common in
             // legitimate names and not needed to break out of an HTML tag.
             || strtr($filename, '<>"', '___') !== $filename
-            // File extension should not be part of configured dangerous extensions
-            || in_array($extension, $dangerous_extensions)
+            // No extension in the filename should be a dangerous one
+            || array_intersect($extensions, $dangerous_extensions)
         );
     }
 
@@ -1465,13 +1484,31 @@ abstract class Utils
     /**
      * Get the timestamp of a date
      *
-     * @param string $date a String expressed in the system.pages.dateformat.default format, with fallback to a
-     *                     strtotime argument
+     * @param string|int|float|DateTimeInterface $date a String expressed in the system.pages.dateformat.default
+     *                     format, with fallback to a strtotime argument. An unquoted YAML date header such as
+     *                     `date: 2022-01-06` never reaches us as a string: the YAML parser reads it as a date and
+     *                     hands over a Unix timestamp, which strtotime() then misreads as a year in the far future.
      * @param string|null $format a date format to use if possible
      * @return int the timestamp
      */
     public static function date2timestamp($date, $format = null)
     {
+        if ($date instanceof DateTimeInterface) {
+            return $date->getTimestamp();
+        }
+
+        if (is_int($date) || is_float($date)) {
+            $date = (string) (int) $date;
+
+            // `date: 20220106` arrives as the number the author typed, and the
+            // parsing below already reads it correctly as a date, so only a
+            // number that cannot be one is treated as a timestamp.
+            $ymd = DateTime::createFromFormat('!Ymd', $date);
+            if ($ymd === false || $ymd->format('Ymd') !== $date) {
+                return (int) $date;
+            }
+        }
+
         $config = Grav::instance()['config'];
         $dateformat = $format ?: $config->get('system.pages.dateformat.default');
 
@@ -1545,6 +1582,10 @@ abstract class Utils
         $grav = Grav::instance();
 
         $username = isset($grav['user']) ? $grav['user']->username : '';
+        // A nonce is tied to the session, so a session that waits for its first write starts now.
+        if (isset($grav['session']) && $grav['session'] instanceof Session) {
+            $grav['session']->startPending();
+        }
         $token = session_id();
         $i = self::nonceTick();
 
@@ -2101,6 +2142,13 @@ abstract class Utils
 
         // put them back at the front
         $types = array_merge(['html', 'htm'], $types);
+
+        // Markdown output for agents adds `.md` as a page type without anyone
+        // having to edit their `pages.types` list. It goes last so it never
+        // wins an ambiguous `Accept` negotiation.
+        if (MarkdownOutput::enabled() && !in_array(MarkdownOutput::FORMAT, $types, true)) {
+            $types[] = MarkdownOutput::FORMAT;
+        }
 
         return $types;
     }

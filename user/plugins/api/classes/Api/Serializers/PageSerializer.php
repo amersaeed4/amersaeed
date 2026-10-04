@@ -12,6 +12,7 @@ use Grav\Common\Markdown\ParsedownExtra;
 use Grav\Common\Page\Interfaces\PageInterface;
 use Grav\Common\Page\Markdown\Excerpts;
 use Grav\Common\Utils;
+use Grav\Plugin\Api\Services\FrontmatterReader;
 
 class PageSerializer implements SerializerInterface
 {
@@ -35,53 +36,17 @@ class PageSerializer implements SerializerInterface
         // Flex-indexed PageObject instances expose EMPTY headers during
         // listing (the index only materializes summary fields). That makes
         // $resource->published() / visible() fall back to Grav's default
-        // "true" even when the frontmatter explicitly says false. Swap in the
-        // fully-loaded legacy Page so every downstream field reads correctly.
-        // Flex-indexed PageObject instances expose EMPTY headers during
-        // listing (the index only materializes summary fields). Read the
-        // frontmatter directly from the .md file so published/visible and
+        // "true" even when the frontmatter explicitly says false. Read the
+        // frontmatter from the .md file instead, so published/visible and
         // everything else in the header are accurate regardless of which
-        // controller path we came through.
+        // controller path we came through. FrontmatterReader parses each file
+        // once and remembers it until the file changes.
         if (empty($headerArr) && $resource instanceof \Grav\Framework\Flex\Pages\FlexPageObject) {
-            $path = method_exists($resource, 'path') ? $resource->path() : null;
-            $template = $resource->template();
-            if ($path && $template) {
-                $candidates = [];
-                // Prefer the page's own language, then the active language,
-                // then the untyped default, then any matching {template}*.md.
-                $pageLang = $resource->language();
-                if ($pageLang) {
-                    $candidates[] = $path . '/' . $template . '.' . $pageLang . '.md';
-                }
-                $grav = \Grav\Common\Grav::instance();
-                $lang = $grav['language'] ?? null;
-                if ($lang && method_exists($lang, 'getLanguage')) {
-                    $active = $lang->getLanguage();
-                    if ($active) {
-                        $candidates[] = $path . '/' . $template . '.' . $active . '.md';
-                    }
-                }
-                $candidates[] = $path . '/' . $template . '.md';
-                foreach ($candidates as $file) {
-                    if (is_file($file)) {
-                        $parsed = $this->parseFrontmatter($file);
-                        if (!empty($parsed)) {
-                            $headerArr = $parsed;
-                            break;
-                        }
-                    }
-                }
-                // Fallback: glob for any {template}*.md file in the directory
-                if (empty($headerArr)) {
-                    foreach (glob($path . '/' . $template . '*.md') ?: [] as $file) {
-                        $parsed = $this->parseFrontmatter($file);
-                        if (!empty($parsed)) {
-                            $headerArr = $parsed;
-                            break;
-                        }
-                    }
-                }
-            }
+            // Prefer the page's own language, then the active language, then
+            // the untyped default, then any matching {template}*.md.
+            $lang = \Grav\Common\Grav::instance()['language'] ?? null;
+            $active = $lang && method_exists($lang, 'getLanguage') ? $lang->getLanguage() : null;
+            $headerArr = FrontmatterReader::forPage($resource, is_string($active) && $active !== '' ? $active : null);
         }
 
         // For flex-indexed PageObject listings the in-memory header is empty
@@ -92,6 +57,10 @@ class PageSerializer implements SerializerInterface
         // the detail endpoint.
         $headerTitle = $headerArr['title'] ?? null;
         $headerMenu = $headerArr['menu'] ?? null;
+
+        $published = array_key_exists('published', $headerArr)
+            ? (bool) $headerArr['published']
+            : $resource->published();
 
         $data = [
             'route' => $resource->route(),
@@ -129,7 +98,16 @@ class PageSerializer implements SerializerInterface
             // legacy Page where the method is correct. Reading the serialized
             // header array (same one we return to the client) gives the same
             // answer in both paths.
-            'published' => array_key_exists('published', $headerArr) ? (bool)$headerArr['published'] : $resource->published(),
+            'published' => $published,
+            // `published` above is a single boolean and can't tell a draft
+            // apart from a page that is merely scheduled or already expired:
+            // on the legacy path Page::setPublishState() folds the dates into
+            // it (a scheduled page reads false, same as a draft), while on the
+            // flex path published() is a bare header read that ignores the
+            // dates entirely (a scheduled page reads true and looks live).
+            // These three fields are purely additive — `published` keeps
+            // exactly the value it has always had (admin2#2523).
+            ...$this->publishWindow($headerArr, $published),
             'visible' => array_key_exists('visible', $headerArr) ? (bool)$headerArr['visible'] : $resource->visible(),
             'routable' => $resource->routable(),
             'date' => $this->formatTimestamp($resource->date()),
@@ -137,6 +115,13 @@ class PageSerializer implements SerializerInterface
             'order' => $resource->order(),
             'has_children' => count($resource->children()) > 0,
         ];
+
+        // Page lists with `fields=summary` leave the full frontmatter out. It is
+        // still read above, because published, visible, title and menu come
+        // from it.
+        if (!($options['include_header'] ?? true)) {
+            unset($data['header']);
+        }
 
         if ($includeTranslations) {
             $data['translated_languages'] = $resource->translatedLanguages();
@@ -149,7 +134,10 @@ class PageSerializer implements SerializerInterface
             // tell whether each language is backed by an EXPLICIT file
             // (default.<lang>.md) or by the implicit default.md fallback.
             $pagePath = $resource->path();
-            $template = $resource->template();
+            // Modules report their template as `modular/<name>`, but the file
+            // on disk is `<name>.md` / `<name>.<lang>.md`, so only the last
+            // segment names the file.
+            $template = $resource->template() ? basename((string) $resource->template()) : '';
             $data['has_default_file'] = $pagePath && $template
                 ? is_file($pagePath . '/' . $template . '.md')
                 : false;
@@ -177,6 +165,7 @@ class PageSerializer implements SerializerInterface
         }
 
         if ($renderContent) {
+            $this->initTwig();
             $data['content_html'] = $resource->content();
         }
 
@@ -205,24 +194,106 @@ class PageSerializer implements SerializerInterface
     }
 
     /**
-     * Parse the YAML frontmatter from a Grav .md file. Returns the header
-     * array, or empty array if there's no frontmatter / on parse failure.
+     * Resolve the page's publishing window into three additive fields:
+     * `publish_date`, `unpublish_date` (both ISO 8601 or null) and
+     * `publish_state` (published|unpublished|scheduled|expired).
+     *
+     * The dates are read from the header array rather than from
+     * PageInterface::publishDate()/unpublishDate() on purpose: the header
+     * array is the one source that is correct on BOTH paths. During a
+     * flex-indexed listing the object's own header is empty, so the flex
+     * accessors return null for a page that plainly has a `publish_date:` in
+     * its frontmatter — the same materialization gap that forces the
+     * re-parse above for `published`/`visible`.
+     *
+     * @param array<string,mixed> $headerArr
+     * @return array{publish_date: ?string, unpublish_date: ?string, publish_state: string}
      */
-    private function parseFrontmatter(string $file): array
+    private function publishWindow(array $headerArr, bool $published): array
     {
-        $contents = @file_get_contents($file);
-        if ($contents === false) {
-            return [];
+        $dateformat = $headerArr['dateformat'] ?? null;
+        $dateformat = is_string($dateformat) && $dateformat !== '' ? $dateformat : null;
+
+        $publishTs = $this->headerDate($headerArr['publish_date'] ?? null, $dateformat);
+        $unpublishTs = $this->headerDate($headerArr['unpublish_date'] ?? null, $dateformat);
+
+        return [
+            'publish_date' => $this->formatTimestamp($publishTs),
+            'unpublish_date' => $this->formatTimestamp($unpublishTs),
+            'publish_state' => $this->resolvePublishState($headerArr, $published, $publishTs, $unpublishTs),
+        ];
+    }
+
+    /**
+     * Parse a frontmatter date into a Unix timestamp using Grav's own parser,
+     * honoring the page's `dateformat:`.
+     *
+     * Utils::date2timestamp() is mandatory here: `10/02/2026` is day-first or
+     * month-first depending entirely on `dateformat`, and strtotime() (or a
+     * client-side `new Date()`) always guesses month-first and silently reads
+     * the wrong day (getgrav/grav-plugin-admin2#134).
+     */
+    private function headerDate(mixed $value, ?string $dateformat): ?int
+    {
+        if ($value === null || $value === '' || $value === false) {
+            return null;
         }
-        // Grav frontmatter: content between leading `---\n` and the next `---\n`.
-        if (!preg_match('/^---\r?\n(.*?)\r?\n---\r?\n/s', $contents, $m)) {
-            return [];
+
+        // A DateTime survives Grav's YAML parse; anything else non-scalar
+        // (an array left by the json round-trip, say) is not a date.
+        if (!$value instanceof \DateTimeInterface && !is_scalar($value)) {
+            return null;
         }
+
+        $timestamp = Utils::date2timestamp($value, $dateformat);
+
+        return is_int($timestamp) && $timestamp !== 0 ? $timestamp : null;
+    }
+
+    /**
+     * Decide which of the four publish states a page is in.
+     *
+     * Mirrors core's precedence in Page::setPublishState(): the dates are only
+     * consulted when `system.pages.publish_dates` is on AND the frontmatter
+     * carries no explicit `published:` key — an explicit value wins outright
+     * and makes both dates inert. Core uses isset(), so a `published:` with a
+     * null value counts as absent; array_key_exists() would not match that.
+     *
+     * @param array<string,mixed> $headerArr
+     */
+    private function resolvePublishState(array $headerArr, bool $published, ?int $publishTs, ?int $unpublishTs): string
+    {
+        if (isset($headerArr['published'])) {
+            return $published ? 'published' : 'unpublished';
+        }
+
+        if ($this->publishDatesEnabled()) {
+            $now = time();
+
+            // Core evaluates the unpublish date first and the publish date
+            // second, so on contradictory dates the publish date has the final
+            // say. Keep that order of precedence here.
+            if ($publishTs !== null && $publishTs > $now) {
+                return 'scheduled';
+            }
+
+            if ($unpublishTs !== null && $unpublishTs < $now) {
+                return 'expired';
+            }
+        }
+
+        return $published ? 'published' : 'unpublished';
+    }
+
+    /**
+     * Whether core would act on publish/unpublish dates at all.
+     */
+    private function publishDatesEnabled(): bool
+    {
         try {
-            $parsed = \Symfony\Component\Yaml\Yaml::parse($m[1]);
-            return is_array($parsed) ? $parsed : [];
+            return (bool) Grav::instance()['config']->get('system.pages.publish_dates', true);
         } catch (\Throwable) {
-            return [];
+            return true;
         }
     }
 
@@ -277,6 +348,11 @@ class PageSerializer implements SerializerInterface
 
     /**
      * Recursively serialize children pages up to the specified depth.
+     *
+     * `child_filter` (callable(PageInterface): bool) decides which children the
+     * caller may see. A child it rejects is left out together with its own
+     * subtree, so a page the caller can't read never comes back nested under
+     * one they can (grav-plugin-api#47).
      */
     private function serializeChildren(PageInterface $page, array $options, int $depth): array
     {
@@ -284,10 +360,14 @@ class PageSerializer implements SerializerInterface
             'include_children' => $depth > 1,
             'children_depth' => $depth - 1,
         ]);
+        $filter = $options['child_filter'] ?? null;
 
         $result = [];
 
         foreach ($page->children() as $child) {
+            if (is_callable($filter) && !$filter($child)) {
+                continue;
+            }
             $result[] = $this->serialize($child, $childOptions);
         }
 
@@ -340,6 +420,8 @@ class PageSerializer implements SerializerInterface
     {
         $max = ($summarySize !== null && $summarySize > 0) ? $summarySize : 300;
 
+        $this->initTwig();
+
         try {
             // Page::summary(size, textOnly: true) is documented to return text, but
             // core short-circuits to full rendered HTML when summaries are disabled
@@ -359,6 +441,26 @@ class PageSerializer implements SerializerInterface
         $text = trim(preg_replace('/\s+/', ' ', $text) ?? $text);
 
         return Utils::truncate($text, $max, true, ' ', '…');
+    }
+
+    /**
+     * Build Twig's environment before a page renders its content.
+     *
+     * The API router answers inside RequestProcessor, ahead of TwigProcessor,
+     * so on an API request nothing has called Twig::init() yet. Page::content()
+     * and summary() run content Twig and shortcodes, and modules render through
+     * Twig unconditionally, all of which need that environment: without it they
+     * fail on a null Twig. init() does nothing once it has run, so this is safe
+     * to call per page. Core's Security::detectXssInEditorContent() does the
+     * same for saves.
+     */
+    private function initTwig(): void
+    {
+        $grav = Grav::instance();
+
+        if (isset($grav['twig'])) {
+            $grav['twig']->init();
+        }
     }
 
     /**

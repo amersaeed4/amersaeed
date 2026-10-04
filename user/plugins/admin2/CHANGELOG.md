@@ -1,3 +1,195 @@
+# v2.1.27
+## 10/01/2026
+
+1. [](#improved)
+    * Dark mode now uses dark greys instead of near-black by default, which is easier on the eyes. A new Dark shade setting under Appearance, for each user and as a site default, lets you keep the previous near-black look (Onyx) or pick Midnight, a deep blue-black.
+    * A new Help text setting under Appearance, for each user and as a site default, lets you show field help in a tooltip behind a small info icon next to the label (the default) or below the label. Plugins can follow the setting with a new `<grav-help>` element, described in the admin-next docs
+    * The dashboard's Page Views chart now shows the views and date for any day you point at, anywhere in the chart rather than only on its small dots, and the arrow keys step through the days.
+    * The media manager's filter buttons, sort menu and column headers, root breadcrumb, search label and Delete button now follow the admin language. Thanks @pmoreno-rodriguez [getgrav/grav-admin-next#26](https://github.com/getgrav/grav-admin-next/pull/26)
+    * A Changelog link beside "Update available" on plugins and themes shows what the new version changes before you update. Thanks @pmoreno-rodriguez [getgrav/grav-admin-next#27](https://github.com/getgrav/grav-admin-next/issues/27)
+2. [](#bugfix)
+    * Users can now generate and revoke their own API keys on their profile page, as the API already allowed [#182](https://github.com/getgrav/grav-plugin-admin2/issues/182)
+    * Custom fields from plugins and themes now show the new value after a save or revert on the Configuration page, instead of keeping their old one [#184](https://github.com/getgrav/grav-plugin-admin2/issues/184)
+    * The Taxonomy field in the page editor no longer stays blank on sites that use a number, such as a year, as a tag or category, which includes every site running the Archives plugin [#186](https://github.com/getgrav/grav-plugin-admin2/issues/186)
+    * Editing one taxonomy type no longer rewrites the others, so a single value such as `category: blog` stays as written
+
+# v2.1.26
+## 09/29/2026
+
+1. [](#improved)
+    * On sites with many languages, page rows in the column view now show the current language and a translated count, such as 3/7, instead of one badge per language that squeezed the page title out of view.
+    * The column view's page preview has a Translations section listing which languages a page is translated into and which are still missing, and clicking a language switches to it.
+    * The Page Info and Translations cards in the page editor sidebar can be collapsed, and the admin remembers your choice on that device.
+    * The check that sends visitors to first-run setup when a site has no accounts is now much cheaper on every frontend page. It stops as soon as it finds one account file and only asks the accounts service for a full count when there is none, which matters on sites where a plugin also keeps accounts in a database. The answer is also worked out once per request.
+
+# v2.1.25
+## 09/28/2026
+
+1. [](#improved)
+    * In tag fields such as a page's taxonomy, Tab now adds the existing tag that best matches what you typed, and existing tags are listed alphabetically.
+    * Pasting a comma-separated list into a tag field adds each item as its own tag.
+    * The "Update All" dialogs now show each package's installed version next to the new one. Thanks @abesnier [grav-admin-next#25](https://github.com/getgrav/grav-admin-next/pull/25)
+2. [](#bugfix)
+    * The admin no longer fails to load with a blank page or an error when a host briefly refuses one of its files, which some shared hosts do when many files are requested at once. It now loads about half as many files, fetches a failed one again and reloads once [#181](https://github.com/getgrav/grav-plugin-admin2/issues/181)
+    * Your own account no longer shows an Enable/Disable toggle or a Status field, since disabling yourself locked you out of the admin [getgrav/grav-plugin-api#49](https://github.com/getgrav/grav-plugin-api/issues/49)
+    * Adding a tag that was already on the page no longer leaves the typed text in the box, where the next word was added onto it [#180](https://github.com/getgrav/grav-plugin-admin2/issues/180)
+    * Tag fields no longer act on Enter while an input method is still composing a word, and Backspace no longer removes a tag while text is showing in the box.
+
+# v2.1.24
+## 09/26/2026
+
+1. [](#improved)
+    * A plugin's settings shown on its own admin screen (`<grav-blueprint-form>`) now put the Save button at the end of the settings tab strip, instead of alone on a row between the plugin's navigation and the tabs. Forms without tabs, or with side tabs, keep the Save row above them.
+
+# v2.1.23
+## 09/24/2026
+
+1. [](#improved)
+    * The system configuration has a new toggle for fast frontmatter parsing, with help text that explains what it changes.
+    * The admin now downloads much less code when it first opens, because the form fields, editors and uploader load only when a screen needs them.
+    * The icon search list used by the icon picker no longer loads on every screen, only when a picker is opened.
+    * Icons that plugins add to the dashboard banner and page panels now load one small group at a time instead of the whole icon set.
+    * The admin's translations are now checked against the server on each visit and only downloaded again when they have changed (requires the matching API update).
+    * The admin no longer waits for your preferences to load before fetching its translations, and no longer fetches them more than once after signing in.
+    * Saving a page, including autosave, no longer refreshes the sidebar counts, which are now only refreshed when something is added, removed, moved or copied.
+    * Saving a page no longer makes the page tree and page lists reload twice.
+    * Page searches now show the first 100 matches with a **Show more** button for the rest.
+    * The Columns view's "no matches" and "empty" labels can now be translated, and the no-match message already shows in every language the admin ships with.
+    * An open dashboard now checks the server for new notifications once a minute instead of reloading every widget, and refreshes the other widgets only when something they show has changed or when you press Refresh.
+    * The dashboard, the sidebar counts and the pages list now share one request for site statistics instead of each asking for them.
+    * The storage exposure check now runs once per browser session, or when you press Refresh on the dashboard, so it no longer fills the browser console with blocked requests on every visit.
+    * The admin font is now split by alphabet, so the browser downloads about 66 KB for English and other Latin-script languages instead of 1.4 MB.
+    * Your preferences are now checked every two minutes instead of every 30 seconds, are applied only when they have actually changed, and open tabs in the same browser share one check.
+    * A page being edited in a background tab no longer checks for other people's changes every few seconds. It keeps its place in the editing session and catches up as soon as you return.
+    * Page blueprints, page types and field options are now reused for a short time instead of being downloaded again on every visit to the editor, and several fields asking for the same list at once now share one request.
+    * The page tree, list, columns, search results and page pickers now load a lighter version of each page (requires the matching API update).
+    * The page navigator now asks the server only for the pages next to the one being edited instead of loading the whole folder (requires the matching API update; older versions keep working as before).
+    * The admin now starts with a single request for your preferences, profile, menus, plugin panels and languages instead of eight separate ones, and skips downloading its translations when the ones it already has are current (requires the matching API update; older versions keep working as before).
+    * Large forms such as the page editor and system configuration now build each tab the first time you open it instead of building every tab up front.
+    * The pages list now keeps only the rows near what you are looking at on screen, so scrolling through thousands of pages stays smooth.
+    * Opening a page, or moving to another page in the editor, now loads its media list once instead of twice.
+    * The check for a newer version of the admin now pauses while the tab is in the background.
+    * A page being edited in a background tab now times its "still here" signal from the collaboration plugin's own settings.
+1. [](#bugfix)
+    * Searching in the Columns view now finds pages across the whole site. It only looked at the first 500 pages and could show results from before an edit.
+    * Typing quickly in a page search no longer lets the results of an earlier search replace the results of the latest one.
+    * The sidebar keeps the last known update counts when the server cannot tell whether updates are available, instead of dropping them.
+    * Saving a form with a missing required field now switches to the tab that holds the field, so the message about it is visible.
+
+# v2.1.22
+## 09/22/2026
+
+1. [](#bugfix)
+    * The media manager now loads every file in a folder, instead of stopping at the first 200. Sorting, searching and reordering now cover the whole folder rather than just the files that happened to load. [getgrav/grav-plugin-admin2#178](https://github.com/getgrav/grav-plugin-admin2/issues/178)
+    * The media picker in a form field now lists every file in a folder too, so a picture further down a large folder can be chosen. [getgrav/grav-plugin-admin2#178](https://github.com/getgrav/grav-plugin-admin2/issues/178)
+    * Opening the admin with an extra slash in the address, such as `//admin`, no longer loads forever. The browser is now sent to the correct address. [getgrav/grav-plugin-admin2#177](https://github.com/getgrav/grav-plugin-admin2/issues/177)
+
+# v2.1.21
+## 09/21/2026
+
+1. [](#new)
+    * A custom logo can now be made taller in the sidebar. Choose **Custom** under **Settings → Branding → Sidebar Logo Height** and drag the slider.
+1. [](#bugfix)
+    * On a brand-new site, opening the admin no longer flashes the sign-in form with placeholder labels such as "Subtitle" before the account setup screen appears. The sign-in and setup screens now wait until they know which one to show and have their text loaded.
+    * The environment switcher now only shows the delete button to super admins, the only accounts the API lets delete an environment.
+    * File fields now tell the API which field an upload or delete belongs to, so a field that allows `.css` or `.md` files with `allow_extensions` in its blueprint works again (requires API 1.0.38).
+
+# v2.1.20
+## 09/18/2026
+
+1. [](#new)
+    * The storage warning can now be collapsed to a single line while you work, or snoozed for 24 hours. Either comes back in full if a different set of files is found.
+
+1. [](#bugfix)
+    * The dashboard's storage check now bypasses CDN caches such as Cloudflare. It could keep reporting exposed files after the server was fixed, because the CDN was still answering with a copy cached before the change.
+    * The storage warning now explains the likely cause from which files could be downloaded: server rules from before `tmp/` was blocked, a static-file layer such as nginx serving some file types ahead of Grav's rules, or rules not applied at all. It also reminds you to purge a CDN's cache after fixing, and checks `.json` files too with API 1.0.37.
+
+# v2.1.19
+## 09/18/2026
+
+1. [](#bugfix)
+    * The dashboard now reports exposed file types in data, backup and temporary directories, using the expanded API exposure probe. HTTP errors and unrelated response pages are treated as inconclusive instead of evidence that access is blocked. Requires API 1.0.36 for the additional probes. [getgrav/grav#4316](https://github.com/getgrav/grav/issues/4316)
+    * **The dashboard's Refresh button now re-runs that check.** It only ran when the dashboard was first opened, so after fixing your server's access rules the warning stayed on screen until a full page reload — which reads as the fix not having worked. Refresh now re-checks; the background refresh that runs every minute deliberately does not, so the site isn't probed on a timer.
+    * A page's template name no longer wraps onto two or three lines in the page list and tree views. The column it sits in was fixed at a width narrower than most template names, so anything longer than about twelve characters broke across lines and could run under the status marker beside it, while the space it needed sat empty next to the title. The column is now wide enough for a normal template name, and an unusually long one is shortened with an ellipsis rather than wrapped.
+    * Admin2 now loads its scripts and styles from wherever Grav finds the plugin, so it works when the user folder or plugins live outside the default `user/plugins` location, such as in multisite setups.
+    * Clicking the Replace field and the buttons in the editor's Find/Replace panel works again. The editor was taking every click back, so the Replace field couldn't be selected and the buttons searched from the wrong place. [getgrav/grav-admin-next#24](https://github.com/getgrav/grav-admin-next/issues/24)
+
+# v2.1.18
+## 09/15/2026
+
+1. [](#new)
+    * The metadata dialog in a page's Media panel now shows the same file details as the Media manager's side panel: a preview, the path, type, size, dimensions and last-modified date, and copyable rows for the file's URL and markdown snippet. The details sit beside the metadata fields where the screen is wide enough, and stack on a narrow one. It also opens for accounts without media write access, which can read the details but not change them.
+
+1. [](#improved)
+    * **Oversized images are shrunk before they are uploaded again.** The old admin has always been able to cap uploaded images to a maximum size and refuse ones outside a resolution range, set under Configuration, and those settings were being ignored here. They now work the same way on every upload in the new admin: page media, the Media manager and file fields in a form [getgrav/grav-plugin-api#41](https://github.com/getgrav/grav-plugin-api/issues/41)
+    * **The Pages screen opens in Columns by default.** That was the default in Grav 1.7 and it suits how most sites are organised better than the tree does. Anyone who has already chosen a view keeps it.
+    * Thumbnails in a page's Media panel no longer grow with the panel. The grid was three columns wide whatever the space, so a few files on a wide screen became huge tiles; it now adds columns instead, and a tile stops at 176px.
+    * The page list now tells apart four publication states instead of two: published, draft, scheduled and expired. Each has its own icon as well as its own colour, so they stay readable in greyscale and for colourblind readers, and hovering a scheduled or expired page names the date it is waiting on. Requires the API plugin 1.0.35 or later; against an older API the list reads published and draft as before. [getgrav/grav-plugin-admin#2523](https://github.com/getgrav/grav-plugin-admin/issues/2523)
+    * The tree, list and column views of the page list now share one status marker, so all three read the same and the labels are translatable.
+
+1. [](#bugfix)
+    * Adding a page under a parent that declares a `child_type` now preselects that template, the way the old admin did. A blog built on Quark, whose `blog` template asks for `item` children, created plain default pages instead. The template is only preselected, not locked, so a different one can still be chosen, and a `?template=` link still wins. Thanks to @onetrev [getgrav/grav-plugin-admin2#175](https://github.com/getgrav/grav-plugin-admin2/issues/175)
+
+# v2.1.17
+## 09/14/2026
+
+1. [](#new)
+    * **Two promo banners can share a row on the dashboard.** A `promo` notification in the getgrav.org feed may now carry a `layout`: consecutive `half` promos sit side by side with a gap, and consecutive `joined` promos form one banner divided by a hairline, which is how Grav Premium and KahunaCart share the Notifications widget. Both stack back to one column when the widget is narrow. The widget also reads a second feed location, `dashboard-row`, after `dashboard`, so the second half of a banner can be published without older admins, which read `dashboard` alone, stacking two banners. A promo can also ask for its logo to be drawn taller than the 28px default with `image_height`, 20 to 48 pixels, so a tall mark sits level with a wide one. A promo without a layout is a banner of its own as before
+
+1. [](#bugfix)
+    * The Info and Plugins pages no longer go blank on a site that has a plugin or theme whose `blueprints.yaml` gives its version as a plain number, such as `version: 1.0`.
+
+# v2.1.16
+## 09/13/2026
+
+1. [](#bugfix)
+    * A `selectize` field that lists its own predefined values suggests them again when you click into it. Blueprints that declare those values the way the documentation shows, under `selectize.options`, were left with an empty tag box and nothing to pick. Thanks to @Salvatos [trilbymedia/grav-plugin-flex-objects#243](https://github.com/trilbymedia/grav-plugin-flex-objects/issues/243)
+    * Flex list columns holding several values now read as text, such as `EN: Hello, FR: Bonjour`, instead of showing `[object Object]`. Long values are shortened, with the whole value on the cell's tooltip. Thanks to @Salvatos [trilbymedia/grav-plugin-flex-objects#241](https://github.com/trilbymedia/grav-plugin-flex-objects/issues/241)
+
+# v2.1.15
+## 09/12/2026
+
+1. [](#bugfix)
+    * The session-expired prompt no longer interrupts a session that is still valid. Returning to an admin tab left open in the background, or working with several admin tabs at once, could ask for a password that reloading the page proved was never needed
+
+# v2.1.14
+## 09/11/2026
+
+1. [](#improved)
+    * When the checks that run before a Grav upgrade stop it, the dashboard now lists the reasons and the plugins and themes involved, with an option to upgrade anyway, instead of a bare "Grav upgrade failed" [getgrav/grav#4299](https://github.com/getgrav/grav/issues/4299)
+
+# v2.1.13
+## 09/11/2026
+
+1. [](#bugfix)
+    * On a new site with no accounts yet, coming back to the admin before creating the first one shows the account setup screen again, instead of a sign-in form nobody can use. It only affected sites installed at the root of their domain
+
+# v2.1.12
+## 09/10/2026
+
+1. [](#new)
+    * Labels for the new **Flex Render Hints** debugger setting that arrives with Grav 2.1.0
+
+1. [](#bugfix)
+    * The Install Plugin and Install Theme pickers show what went wrong, with a Retry button, when the server's reply can't be read, instead of spinning forever. The browser console logs the start and end of the reply, so stray output from PHP is easy to find. Thanks to @sandymac [#173](https://github.com/getgrav/grav-plugin-admin2/issues/173)
+    * Configuration pages say a request failed, with a Retry button, instead of claiming there is no configuration to show
+    * A user group without a display name shows up under its own name in a user's Groups field, instead of as a blank entry that can't be picked. Thanks to @Keyskeeper [#172](https://github.com/getgrav/grav-plugin-admin2/issues/172)
+    * A lost connection is reported as a network error again, instead of as an error nothing could read
+    * The Clear button in the Twig-in-Content report only shows for accounts that can change system settings, the permission API plugin 1.0.30 now asks for [getgrav/grav-plugin-api#35](https://github.com/getgrav/grav-plugin-api/issues/35)
+    * Saving a page field that sits inside a list in the page's frontmatter, such as `header.paneles.0.kicker`, no longer replaces the whole list with that one entry. The other entries were deleted from the page. Thanks to @gioxxr [#174](https://github.com/getgrav/grav-plugin-admin2/issues/174)
+
+# v2.1.11
+## 09/09/2026
+
+1. [](#improved)
+    * Previewing a modular child page now shows the page it lives in, with the module in place, instead of the module's template on its own. A module is only ever a section inside its parent, so previewing one directly produced a bare, doubled fragment with no theme styling. An unpublished module shows up too, and the preview header says when the URL you are looking at is the parent rather than the page being edited. Needs API plugin 1.0.29 or later. Thanks to @onetrev [#170](https://github.com/getgrav/grav-plugin-admin2/issues/170)
+
+# v2.1.10
+## 09/08/2026
+
+1. [](#improved)
+    * **The scheduler's information banner no longer repeats the security warning printed below it.** Both said that only advanced users should configure custom jobs, so the notices panel counted the same advice twice. The English wording is trimmed; other languages keep the longer sentence until they are translated again
+
 # v2.1.9
 ## 09/05/2026
 

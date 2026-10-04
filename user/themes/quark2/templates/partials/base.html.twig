@@ -4,6 +4,11 @@
 {% set accent_is_hex = accent and accent matches '/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/' %}
 {% set fa_enabled = theme_var('fontawesome.enabled') %}
 {% set fa_local   = theme_var('fontawesome.local') %}
+{% set favicon = theme_var('custom_favicon') %}
+{% set favicon_first = (favicon is iterable and favicon|length > 0) ? favicon|first : null %}
+{% set favicon_file = favicon_first.name|default(null) %}
+{% set favicon_url = favicon_file ? url('theme://images/favicon/' ~ favicon_file) : null %}
+{% set favicon_type = favicon_url ? ({'svg': 'image/svg+xml', 'ico': 'image/x-icon'}[favicon_file|split('.')|last|lower]|default('image/png')) : 'image/png' %}
 {% use 'blocks/base.html.twig' %}
 <!DOCTYPE html>
 <html lang="{{ grav.language.getActive ?: grav.config.site.default_lang }}"
@@ -18,11 +23,12 @@
 
     {% include 'partials/metadata.html.twig' %}
 
-    <link rel="icon" type="image/png" href="{{ url('theme://images/favicon.png') }}" />
+    <link rel="icon" type="{{ favicon_type }}" href="{{ favicon_url ?: url('theme://images/favicon.png') }}" />
     <link rel="canonical" href="{{ page.url(true, true) }}" />
 
-    {# Preload the critical latin subset so headings + body text render in-font on first paint #}
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/nunito/nunito-latin.woff2') }}" />
+    {# Preload the critical latin subsets so headings + body text render in-font on first paint #}
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/cal-sans/cal-sans-latin.woff2') }}" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/inter/inter-latin.woff2') }}" />
 
     {% if accent_is_hex %}
     {# User-configured accent: tint links, focus ring, and filled UI accents with the chosen hex #}
@@ -99,10 +105,9 @@
                         </div>
                     </div>
                     <div class="navbar-section actions">
-                        {% include 'partials/social-links.html.twig' %}
                         {% include 'partials/theme-toggle.html.twig' %}
                         {% if config.plugins.login.enabled and grav.user.username %}
-                            {% include 'partials/login-status.html.twig' ignore missing %}
+                            <span class="login-status-wrapper"><i class="fa-solid fa-user" aria-hidden="true"></i> {% include 'partials/login-status.html.twig' ignore missing %}</span>
                         {% endif %}
                     </div>
                 </nav>
@@ -138,18 +143,6 @@
         {% include 'partials/footer.html.twig' %}
     {% endblock %}
 
-    {% set can_edit_pages = grav.user.authorize('admin.super') or grav.user.authorize('api.super') or grav.user.authorize('api.pages.write') %}
-    {% if config.plugins.login.enabled and grav.user.username and can_edit_pages %}
-    {# Floating "edit this page" shortcut for logged-in editors — jumps
-       straight into Admin's editor for the page currently being viewed. #}
-    <a class="edit-page-fab"
-       href="{{ config.plugins.admin2.route|default('/admin') }}/pages{{ page.rawRoute }}"
-       title="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}"
-       aria-label="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}">
-        <i class="fa-solid fa-pen" aria-hidden="true"></i>
-    </a>
-    {% endif %}
-
     {% block mobile %}
     <div class="mobile-container">
         <div class="overlay" id="overlay" role="dialog" aria-label="{{ 'THEME_QUARK2.ARIA.MENU'|t|e('html_attr') }}">
@@ -159,10 +152,7 @@
             <nav class="overlay-menu" aria-label="{{ 'THEME_QUARK2.ARIA.MOBILE_NAV'|t|e('html_attr') }}">
                 {% include 'partials/navigation.html.twig' with {tree: true} %}
             </nav>
-            <div class="mobile-overlay-actions">
-                {% include 'partials/social-links.html.twig' %}
-            </div>
-            <div style="margin-top:1.25rem;">
+            <div style="margin-top:2rem;">
                 {% include 'partials/theme-toggle.html.twig' with {labeled: true} %}
             </div>
         </div>

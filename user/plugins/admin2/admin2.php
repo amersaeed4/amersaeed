@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Grav\Plugin;
 
 use Grav\Common\Plugin;
+use Grav\Common\Uri;
+use Grav\Common\Utils;
 use Grav\Events\PermissionsRegisterEvent;
 use Grav\Framework\Acl\PermissionsReader;
 
@@ -49,6 +51,9 @@ class Admin2Plugin extends Plugin
      * Example: '/admin2' or '/admin'.
      */
     protected string $base = '';
+
+    /** @var bool|null Per-request result of anyUsersExist() */
+    private ?bool $anyUsersExist = null;
 
     /**
      * The full URL path from the webserver root to the admin route — the
@@ -280,7 +285,8 @@ class Admin2Plugin extends Plugin
         // not from a config knob: if a host relocates plugins (e.g. via a
         // custom stream override) the URL stays consistent with the files
         // Apache will actually be serving.
-        $this->assetsPath = $rootPath . '/user/plugins/' . $this->name . '/app';
+        $this->assetsPath = Utils::url('plugins://' . $this->name . '/app')
+            ?: $rootPath . '/user/plugins/' . $this->name . '/app';
 
         // Grav core strips known "page" extensions (html, json, xml, rss…)
         // from $uri->route(), per system.pages.types. Reattach the
@@ -351,6 +357,16 @@ class Admin2Plugin extends Plugin
             return;
         }
 
+        // Core collapses doubled slashes when it matches the route, so `//admin`
+        // lands here too, but the browser keeps the raw path. The SPA router then
+        // sees a path outside its base and reloads the page forever (#177). Send
+        // the browser to the clean URL instead.
+        $requested = (string) $this->grav['uri']->uri(false);
+        [$path, $query] = array_pad(explode('?', $requested, 2), 2, null);
+        if (str_contains($path, '//')) {
+            $this->grav->redirect(Uri::cleanPath($path) . ($query !== null ? '?' . $query : ''));
+        }
+
         $this->enable([
             'onPagesInitialized' => ['onPagesInitialized', 1000],
         ]);
@@ -377,9 +393,33 @@ class Admin2Plugin extends Plugin
      * Check whether any user accounts exist. Mirrors Admin::doAnyUsersExist()
      * from admin-classic but is self-contained so admin2 does not depend on
      * admin-classic being installed.
+     *
+     * This runs on every frontend request, so it answers from the cheapest
+     * source that is certain. When Grav keeps accounts as top-level YAML files
+     * in account:// (regular accounts, or Flex accounts with file storage), one
+     * such file is enough to know the answer is true, without asking the
+     * accounts service to count everything. That matters when a plugin
+     * replaces the service with one that also counts accounts in a database.
+     * In every other case, including "no YAML file found", the answer comes
+     * from the accounts service exactly as before, so the fast path can only
+     * ever confirm accounts exist and never reports that none do.
      */
     private function anyUsersExist(): bool
     {
+        return $this->anyUsersExist ??= $this->detectAnyUsers();
+    }
+
+    private function detectAnyUsers(): bool
+    {
+        $accountsDir = $this->grav['locator']->findResource('account://', true) ?: null;
+        if ($accountsDir !== null && !is_dir($accountsDir)) {
+            $accountsDir = null;
+        }
+
+        if ($accountsDir !== null && $this->accountsAreTopLevelYaml($accountsDir) && $this->hasTopLevelYaml($accountsDir)) {
+            return true;
+        }
+
         // Count through the same account backend the Users page uses, so the
         // check stays accurate across regular flat-file, Flex, and custom
         // nested layouts. A raw glob of account://*.yaml only sees top-level
@@ -394,16 +434,69 @@ class Admin2Plugin extends Plugin
             // service is unavailable this early in the bootstrap.
         }
 
-        $locator = $this->grav['locator'];
-        $accountsDir = $locator->findResource('account://', true);
-        if (!$accountsDir || !is_dir($accountsDir)) {
+        return $accountsDir !== null && $this->hasTopLevelYaml($accountsDir);
+    }
+
+    /**
+     * Whether Grav's own account store counts every top-level *.yaml file in
+     * account:// as an account. True for regular accounts (DataUser counts
+     * exactly those files) and for Flex accounts whose storage is a Flex
+     * FileStorage rooted at account:// (it indexes every file in that folder).
+     * Folder storage (user/accounts/xx/<name>/user.yaml), custom storage
+     * classes, or a FileStorage pointed at another folder all return false,
+     * so those layouts always go through the accounts service.
+     */
+    private function accountsAreTopLevelYaml(string $accountsDir): bool
+    {
+        $type = \defined('GRAV_USER_INSTANCE')
+            ? \GRAV_USER_INSTANCE
+            : (string) $this->config->get('system.accounts.type', 'regular');
+        if (strtolower($type) !== 'flex') {
+            return true;
+        }
+
+        try {
+            $directory = $this->grav['flex']->getDirectory('user-accounts');
+            $storage = $directory?->getStorage();
+        } catch (\Throwable) {
+            return false;
+        }
+        if (!$storage instanceof \Grav\Framework\Flex\Storage\FileStorage) {
             return false;
         }
 
-        foreach (glob($accountsDir . '/*.yaml') ?: [] as $file) {
-            if (is_file($file)) {
-                return true;
+        $folder = (string) $storage->getStoragePath();
+        if ($folder === '') {
+            return false;
+        }
+        if (!str_starts_with($folder, '/') && \defined('GRAV_ROOT')) {
+            $folder = \GRAV_ROOT . '/' . $folder;
+        }
+
+        $folder = realpath($folder);
+
+        return $folder !== false && $folder === realpath($accountsDir);
+    }
+
+    /**
+     * Whether account:// holds at least one *.yaml file, stopping at the
+     * first one found. Hidden files are skipped, as glob() and Flex do.
+     */
+    private function hasTopLevelYaml(string $accountsDir): bool
+    {
+        $handle = @opendir($accountsDir);
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            while (($name = readdir($handle)) !== false) {
+                if ($name[0] !== '.' && str_ends_with($name, '.yaml') && is_file($accountsDir . '/' . $name)) {
+                    return true;
+                }
             }
+        } finally {
+            closedir($handle);
         }
 
         return false;
@@ -566,7 +659,7 @@ class Admin2Plugin extends Plugin
             $sitePrefs = $resolver->sitePreferences();
             $language = is_string($sitePrefs['adminLanguage'] ?? null) ? $sitePrefs['adminLanguage'] : '';
             $appearance = [];
-            foreach (['colorMode', 'accentHue', 'accentSaturation', 'fontFamily', 'fontSize'] as $key) {
+            foreach (['colorMode', 'accentHue', 'accentSaturation', 'darkShade', 'fontFamily', 'fontSize', 'helpMode'] as $key) {
                 if (array_key_exists($key, $sitePrefs)) {
                     $appearance[$key] = $sitePrefs[$key];
                 }

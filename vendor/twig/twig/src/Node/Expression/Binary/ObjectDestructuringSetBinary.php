@@ -53,7 +53,8 @@ class ObjectDestructuringSetBinary extends AbstractBinary
     public function compile(Compiler $compiler): void
     {
         $compiler->addDebugInfo($this);
-        $compiler->raw('[');
+        $var = '$'.$compiler->getVarName();
+        $compiler->raw('[[');
         foreach ($this->mappings as $i => $mapping) {
             if ($i) {
                 $compiler->raw(', ');
@@ -65,9 +66,17 @@ class ObjectDestructuringSetBinary extends AbstractBinary
             if ($i) {
                 $compiler->raw(', ');
             }
-            $compiler->raw('CoreExtension::getAttribute($this->env, $this->source, ')->subcompile($this->getNode('right'))->raw(', ')->repr($mapping['property'])->raw(', [], \\Twig\\Template::ANY_CALL, false, false, ')->repr($compiler->getEnvironment()->hasExtension(SandboxExtension::class))->raw(', ')->repr($this->getNode('right')->getTemplateLine())->raw(')');
+            $compiler->raw('CoreExtension::getAttribute($this->env, $this->source, ');
+            if (0 === $i) {
+                $compiler->raw('('.$var.' = ')->subcompile($this->getNode('right'))->raw(')');
+            } else {
+                $compiler->raw($var);
+            }
+            // GRAV FORK: compile-time source sandboxing (see CompileTimeSourcePolicyInterface), a trusted
+            // template reads properties unchecked. If lost, trusted templates keep the check (slower, still safe).
+            $compiler->raw(', ')->repr($mapping['property'])->raw(', [], \\Twig\\Template::ANY_CALL, false, false, ')->repr($compiler->getEnvironment()->hasExtension(SandboxExtension::class) && !$this->hasAttribute('sandbox_trusted'))->raw(', ')->repr($this->getNode('right')->getTemplateLine())->raw(')');
         }
-        $compiler->raw(']');
+        $compiler->raw('], '.$var.' = null][0]');
     }
 
     public function operator(Compiler $compiler): Compiler

@@ -1,5 +1,25 @@
-last_checked: 1788785828
+last_checked: 1791143775
 data:
+  -
+    title: 'Meet Helpdesk Pro and Mailroom'
+    url: 'https://getgrav.org/blog/helpdesk-pro-and-mailroom'
+    date: '2026-09-28T12:10:00+00:00'
+    summary: ''
+  -
+    title: 'Grav 2.2 Released: The Fastest Flat-File CMS Is Now 2x Faster'
+    url: 'https://getgrav.org/blog/grav-2-2-released'
+    date: '2026-09-24T09:00:00+00:00'
+    summary: ''
+  -
+    title: 'KahunaCart Is Out'
+    url: 'https://getgrav.org/blog/kahunacart-released'
+    date: '2026-09-14T10:00:00+00:00'
+    summary: ''
+  -
+    title: 'Grav 2.1 Released: Every Page Speaks Markdown'
+    url: 'https://getgrav.org/blog/grav-2-1-released'
+    date: '2026-09-11T12:00:00+00:00'
+    summary: ''
   -
     title: 'KahunaCart: A Real Store, Inside Your Grav Site'
     url: 'https://getgrav.org/blog/kahunacart-coming-soon'
@@ -29,24 +49,4 @@ data:
     title: 'Grav 2.0 Released!'
     url: 'https://getgrav.org/blog/grav-2-stable-released'
     date: '2026-06-20T13:00:00+00:00'
-    summary: ''
-  -
-    title: 'Forum Pro: Bringing the Community Home'
-    url: 'https://getgrav.org/blog/grav-2-forum-pro'
-    date: '2026-06-20T12:30:00+00:00'
-    summary: ''
-  -
-    title: 'The New getgrav.org'
-    url: 'https://getgrav.org/blog/new-getgrav-org'
-    date: '2026-06-20T12:00:00+00:00'
-    summary: ''
-  -
-    title: 'Grav 2.0: Twig in Content and the New Security Sandbox'
-    url: 'https://getgrav.org/blog/grav-2-twig-content-security'
-    date: '2026-06-17T12:00:00+00:00'
-    summary: ''
-  -
-    title: 'macOS Golden Gate Web Development: Meet Reeve'
-    url: 'https://getgrav.org/blog/macos-golden-gate-reeve'
-    date: '2026-06-16T10:00:00+00:00'
     summary: ''

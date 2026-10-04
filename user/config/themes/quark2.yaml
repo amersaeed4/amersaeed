@@ -1,8 +1,2 @@
 accent-color: '#714B67'
-custom_logo:
-  'user/themes/quark2/images/logo/Amer Saeed-logo.png':
-    name: 'Amer Saeed-logo.png'
-    type: image/png
-    size: 19569
-    path: 'user/themes/quark2/images/logo/Amer Saeed-logo.png'
-    url: '/amersaeed/user/themes/quark2/images/logo/Amer Saeed-logo.png'
+custom_logo: {  }

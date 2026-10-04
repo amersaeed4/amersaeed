@@ -49,6 +49,7 @@ final class SandboxDefaults
             'backups',
             'scheduler',
             'system.cache.redis.password',
+            'system.debugger.token',
             // Proxy URLs accept HTTP userinfo (http://user:pass@host:3128) and
             // Symfony turns that into a Basic auth header, so both slots are
             // credential-bearing even though neither is named like a secret —
@@ -249,7 +250,10 @@ final class SandboxDefaults
             'cron',
             'debug',
             'dump',
-            'get_cookie',
+            // `get_cookie` is deliberately absent: it reads the request cookies of
+            // whoever is viewing the page, so editor-authored content could capture a
+            // visiting admin's session id, and the rendered result is then stored in a
+            // page-content cache that has no session dimension. (GHSA-pp89-h475-7gj6)
             'get_type',
             'gist',
             'header_var',

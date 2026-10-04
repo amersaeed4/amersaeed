@@ -1,3 +1,37 @@
+# v1.1.16
+## 10/01/2026
+
+1. [](#bugfix)
+    * The 404 and other error pages now sit in the same white content card as regular pages. Thanks @Mikanoshi and @Jah-yee [#26](https://github.com/getgrav/grav-theme-quark2/issues/26)
+    * The "Back home" button on error pages can now be translated instead of always showing English. Thanks @Mikanoshi [#26](https://github.com/getgrav/grav-theme-quark2/issues/26)
+
+# v1.1.15
+## 09/28/2026
+
+1. [](#new)
+    * You can now upload your own favicon (PNG, SVG or ICO) in the theme settings, next to the custom logos. Thanks @abesnier [#25](https://github.com/getgrav/grav-theme-quark2/pull/25)
+
+# v1.1.14
+## 09/15/2026
+
+1. [](#new)
+    * Spanish is now available as a site language. Thanks @pmoreno-rodriguez [#24](https://github.com/getgrav/grav-theme-quark2/pull/24)
+
+# v1.1.13
+## 09/11/2026
+
+1. [](#bugfix)
+    * Meta tag content was escaped twice, so a description containing `&` or a space showed up as `&amp;amp;` and `&#x20;` in the page source. The theme's copy of the metadata partial is gone and Grav core's is used instead, which also adds the `<link rel="alternate" type="text/markdown">` tag for Grav 2.1's Markdown output
+1. [](#improved)
+    * The theme now requires Grav 2.1.0 or later
+    * The sidebar's feed links use Grav 2.1's format-aware page URLs, so a blog at the site root links to `/index.rss` and `/index.atom` instead of working around the home route by hand
+
+# v1.1.12
+## 09/09/2026
+
+1. [](#bugfix)
+    * Icons chosen in the admin now render. The icon picker saves a value with the `fa-` prefix already on it, and the templates added a second one, so a changed icon silently disappeared while the ones shipped with a skeleton kept working. Feature, menu and page icons all accept whatever form the value arrives in. Thanks to @UnixxSH [getgrav/grav-skeleton-onepage-site#20](https://github.com/getgrav/grav-skeleton-onepage-site/issues/20)
+
 # v1.1.11
 ## 08/13/2026
 

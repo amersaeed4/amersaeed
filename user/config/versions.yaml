@@ -1,6 +1,8 @@
 core:
   grav:
-    version: 2.0.24
-    schema: 1.8.0_2026-08-13_0
+    version: 2.2.4
+    schema: 2.2.4_2026-09-30_0
     history:
       - { version: 2.0.24, date: '2026-09-07 12:57:49' }
+      - { version: 2.0.27, date: '2026-10-04 20:03:05' }
+      - { version: 2.2.4, date: '2026-10-04 20:03:21' }

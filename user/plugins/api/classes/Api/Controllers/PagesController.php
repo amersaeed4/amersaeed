@@ -6,6 +6,7 @@ namespace Grav\Plugin\Api\Controllers;
 
 use Grav\Common\Filesystem\Folder;
 use Grav\Common\Grav;
+use Grav\Common\Inflector;
 use Grav\Common\Config\Config;
 use Grav\Common\Language\Language;
 use Grav\Common\Language\LanguageCodes;
@@ -43,8 +44,7 @@ class PagesController extends AbstractApiController
     public function __construct(Grav $grav, Config $config)
     {
         parent::__construct($grav, $config);
-        $cacheDir = $grav['locator']->findResource('cache://') . '/api/thumbnails';
-        $thumbnailService = new ThumbnailService($cacheDir);
+        $thumbnailService = ThumbnailService::forGrav($grav);
         $baseUrl = '/' . trim($config->get('plugins.api.route', '/api'), '/') . '/' . $config->get('plugins.api.version_prefix', 'v1');
         $mediaSerializer = new MediaSerializer($thumbnailService, $baseUrl);
         $this->serializer = new PageSerializer($mediaSerializer);
@@ -78,14 +78,14 @@ class PagesController extends AbstractApiController
         $sorting = $this->getSorting($request, self::ALLOWED_SORT_FIELDS);
         $pagination = $this->getPagination($request);
         $query = $request->getQueryParams();
-        $search = $query['search'] ?? null;
+        $search = self::searchTerm($query);
 
         $sortField = $sorting['sort'] ?? 'date';
         $sortOrder = $sorting['sort'] ? $sorting['order'] : 'desc';
 
         // 'default' sort with children_of: use native page ordering
         if ($sortField === 'default' && isset($filters['children_of'])) {
-            return $this->indexViaDefaultSort($request, $filters['children_of'], $filters, $pagination);
+            return $this->indexViaDefaultSort($request, $filters['children_of'], $filters, $pagination, $search);
         }
         if ($sortField === 'default') {
             $sortField = 'order';
@@ -96,7 +96,7 @@ class PagesController extends AbstractApiController
         $collection = $directory->getCollection();
 
         // Apply search
-        if ($search && $search !== '') {
+        if ($search !== null) {
             $collection = $collection->search($search);
         }
 
@@ -111,8 +111,21 @@ class PagesController extends AbstractApiController
         // every page unfiltered (getgrav/grav-plugin-admin2#121). matchesFilters()
         // covers all filter keys and works on any collection/index type.
         if ($filters) {
+            // A folder listing (children_of, or root=true) only tests that
+            // folder's own children, not every page on the site.
+            $source = $collection;
+            $folderParent = $filters['children_of'] ?? (
+                isset($filters['root']) && filter_var($filters['root'], FILTER_VALIDATE_BOOLEAN) ? '/' : null
+            );
+            if (is_string($folderParent)) {
+                $folder = $this->flexFolderChildren($directory, $collection, $folderParent);
+                if ($folder !== null) {
+                    $source = $collection->select($folder['keys']);
+                }
+            }
+
             $filtered = [];
-            foreach ($collection as $page) {
+            foreach ($source as $page) {
                 if ($page instanceof PageInterface && $this->matchesFilters($page, $filters)) {
                     $filtered[$page->getKey()] = $page;
                 }
@@ -133,10 +146,13 @@ class PagesController extends AbstractApiController
         $collection = $collection->sort([$flexSortField => $sortOrder]);
 
         // Skip the virtual pages-root container (no file on disk). The home
-        // page IS a real file-backed page even though its route is '/'.
+        // page IS a real file-backed page even though its route is '/', and a
+        // page carrying `routes.default: ''` is a real page whose route is the
+        // empty string, so ask root() rather than testing the route for
+        // truthiness (getgrav/grav-plugin-api#34).
         $items = [];
         foreach ($collection as $page) {
-            if ($page instanceof PageInterface && $page->route() && $page->exists()) {
+            if ($page instanceof PageInterface && !$page->root() && $page->exists()) {
                 $items[] = $page;
             }
         }
@@ -145,20 +161,7 @@ class PagesController extends AbstractApiController
         $locatedAt = $this->applyLocate($items, $pagination, $query['locate'] ?? null);
         $slice = array_slice($items, $pagination['offset'], $pagination['limit']);
 
-        $includeTranslations = filter_var(
-            $request->getQueryParams()['translations'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        );
-
-        $listOptions = [
-            'include_content' => false,
-            'render_content' => false,
-            'include_children' => false,
-            'include_media' => false,
-            'include_translations' => $includeTranslations,
-        ];
-
-        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, $listOptions));
+        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, $this->listOptions($request)));
 
         return ApiResponse::paginated(
             data: $data,
@@ -167,6 +170,7 @@ class PagesController extends AbstractApiController
             perPage: $pagination['per_page'],
             baseUrl: $this->getApiBaseUrl() . '/pages',
             locatedAtIndex: $locatedAt,
+            query: $request->getQueryParams(),
         );
     }
 
@@ -180,12 +184,13 @@ class PagesController extends AbstractApiController
         $filters = $this->getFilters($request, self::ALLOWED_FILTERS);
         $sorting = $this->getSorting($request, self::ALLOWED_SORT_FIELDS);
         $pagination = $this->getPagination($request);
+        $search = self::searchTerm($request->getQueryParams());
 
         $sortField = $sorting['sort'] ?? 'date';
         $sortOrder = $sorting['sort'] ? $sorting['order'] : 'desc';
 
         if ($sortField === 'default' && isset($filters['children_of'])) {
-            return $this->indexViaDefaultSort($request, $filters['children_of'], $filters, $pagination);
+            return $this->indexViaDefaultSort($request, $filters['children_of'], $filters, $pagination, $search);
         }
         if ($sortField === 'default') {
             $sortField = 'order';
@@ -193,27 +198,14 @@ class PagesController extends AbstractApiController
         }
 
         $pages = $this->grav['pages'];
-        $allPages = $this->collectAndFilterPages($pages->instances(), $filters);
+        $allPages = $this->collectAndFilterPages($this->candidatePages($pages, $filters), $filters, $search);
         $allPages = $this->sortPages($allPages, $sortField, $sortOrder);
 
         $total = count($allPages);
         $locatedAt = $this->applyLocate($allPages, $pagination, $request->getQueryParams()['locate'] ?? null);
         $slice = array_slice($allPages, $pagination['offset'], $pagination['limit']);
 
-        $includeTranslations = filter_var(
-            $request->getQueryParams()['translations'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        );
-
-        $listOptions = [
-            'include_content' => false,
-            'render_content' => false,
-            'include_children' => false,
-            'include_media' => false,
-            'include_translations' => $includeTranslations,
-        ];
-
-        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, $listOptions));
+        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, $this->listOptions($request)));
 
         return ApiResponse::paginated(
             data: $data,
@@ -222,6 +214,7 @@ class PagesController extends AbstractApiController
             perPage: $pagination['per_page'],
             baseUrl: $this->getApiBaseUrl() . '/pages',
             locatedAtIndex: $locatedAt,
+            query: $request->getQueryParams(),
         );
     }
 
@@ -256,6 +249,10 @@ class PagesController extends AbstractApiController
                 'children_depth' => max(1, (int) ($query['children_depth'] ?? 1)),
                 'include_media' => true,
                 'include_translations' => filter_var($query['translations'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                // Every nested child passes the same read check as the page
+                // itself, so ?children=true can't return a child the caller
+                // would get a 403 for on its own route (#47).
+                'child_filter' => fn (PageInterface $child): bool => $this->canReadPage($request, $child),
             ];
 
             $data = $this->serializer->serialize($page, $options);
@@ -270,6 +267,93 @@ class PagesController extends AbstractApiController
         } finally {
             $this->restoreLanguage($previousLang);
         }
+    }
+
+    /**
+     * GET /pages/{route}/neighbors — where a page sits among its siblings, for
+     * the admin's page navigator: its parent, the previous and next sibling,
+     * its first child, its position and the sibling count.
+     *
+     * Siblings are the parent's children in `sort=default` order, exactly as
+     * `GET /pages?children_of=<parent>&sort=default` lists them (`/` for a
+     * top-level page), and every row is a `fields=summary` list row. Only the
+     * parent's and the page's own children are read, never the whole site,
+     * so opening the editor no longer downloads every sibling to find two.
+     *
+     * A page that its parent's listing leaves out (a folder with no content
+     * file) gets `index: -1` and no previous or next sibling.
+     *
+     * Pages the caller can't read on their own route are left out before any
+     * of that is worked out: the parent comes back null, prev/next are the
+     * nearest readable siblings, and index/total count only readable ones.
+     */
+    public function neighbors(ServerRequestInterface $request): ResponseInterface
+    {
+        $previousLang = $this->applyLanguage($request);
+
+        try {
+            $this->enablePages();
+
+            $route = $this->getRouteParam($request, 'route');
+            $page = $this->findPageOrFail('/' . $route, $request, self::PERMISSION_READ);
+            $this->authorizePageAction($request, $page, 'read', self::PERMISSION_READ);
+
+            $parent = $page->parent();
+            if ($parent !== null && $parent->root()) {
+                $parent = null;
+            }
+            $parentRoute = $parent !== null ? (string) $parent->rawRoute() : '/';
+
+            // Only pages the caller could open on their own route count: a
+            // read grant on this one page doesn't reveal the pages around it,
+            // and prev/next skip past a hidden sibling instead of stopping (#48).
+            $readable = fn (array $pages): array => array_values(array_filter(
+                $pages,
+                fn (PageInterface $candidate): bool => $this->canReadPage($request, $candidate),
+            ));
+
+            if ($parent !== null && !$this->canReadPage($request, $parent)) {
+                $parent = null;
+            }
+
+            $siblings = $readable($this->defaultOrderedChildren(['children_of' => $parentRoute]));
+            $index = -1;
+            foreach ($siblings as $position => $sibling) {
+                if ($sibling->path() === $page->path()) {
+                    $index = $position;
+                    break;
+                }
+            }
+
+            $children = $readable($this->defaultOrderedChildren(['children_of' => (string) $page->rawRoute()]));
+
+            return ApiResponse::create([
+                'parent' => $this->summaryRow($request, $parent),
+                'prev' => $index > 0 ? $this->summaryRow($request, $siblings[$index - 1]) : null,
+                'next' => $index >= 0 ? $this->summaryRow($request, $siblings[$index + 1] ?? null) : null,
+                'first_child' => $this->summaryRow($request, $children[0] ?? null),
+                'index' => $index,
+                'total' => count($siblings),
+            ]);
+        } finally {
+            $this->restoreLanguage($previousLang);
+        }
+    }
+
+    /**
+     * One page serialized exactly like a `GET /pages?fields=summary` row,
+     * including the caller's per-page permissions, or null for no page.
+     */
+    private function summaryRow(ServerRequestInterface $request, ?PageInterface $page): ?array
+    {
+        if ($page === null) {
+            return null;
+        }
+
+        $options = ['include_header' => false] + $this->listOptions($request);
+        $rows = $this->attachPageCapabilities($request, [$page], $this->serializer->serializeCollection([$page], $options));
+
+        return $rows[0] ?? null;
     }
 
     /**
@@ -301,9 +385,21 @@ class PagesController extends AbstractApiController
             $page = $this->findPageOrFail('/' . $route, $request, self::PERMISSION_READ);
             $this->authorizePageAction($request, $page, 'read', self::PERMISSION_READ);
 
-            // Pin the token to the page's canonical public route — the same value
-            // the admin builds the preview URL from — so it can only ever unlock
-            // this page. Only super admins and users with page-read can reach here.
+            // The page the browser must actually load. The same page as the one
+            // asked for, except for a module, which only renders inside its
+            // parent (admin2#170).
+            $target = self::previewRenderTarget($page);
+
+            // Previewing a module unlocks its host page too, so the caller has
+            // to be allowed to read that page in its own right: a per-page ACL
+            // can grant a module without granting its parent.
+            if ($target !== $page) {
+                $this->authorizePageAction($request, $target, 'read', self::PERMISSION_READ);
+            }
+
+            // Pin the token to the page's canonical public route, the same value
+            // the admin builds the preview URL from, so it can only ever unlock
+            // this page. Only super admins and users with page-read reach here.
             $jwt = new JwtAuthenticator($this->grav, $this->config);
             $ttl = max(30, (int) $this->config->get('plugins.api.preview_token_ttl', 300));
             $token = $jwt->generatePreviewToken($this->getUser($request), $page->route(), $ttl);
@@ -311,10 +407,66 @@ class PagesController extends AbstractApiController
             return ApiResponse::create([
                 'token' => $token,
                 'expires_in' => $ttl,
+                'route' => (string) $target->route(),
+                // A theme that gives its modules an anchor can scroll straight
+                // to the one being previewed. Advisory only: a theme that emits
+                // no such id simply lands at the top of the parent.
+                'anchor' => $target !== $page ? self::previewAnchor($page) : null,
             ]);
         } finally {
             $this->restoreLanguage($previousLang);
         }
+    }
+
+    /**
+     * The page a preview of `$page` should actually load.
+     *
+     * Normally the page itself. A module is the exception: it is never a page
+     * in its own right, only a section the theme draws inside its parent.
+     * Requesting one directly renders the module template standalone, with no
+     * `<html>` and no theme assets, and emits the section twice, because a
+     * module's content is already that template's output (Twig::processPage())
+     * and the dispatched page render then wraps it in the very same template
+     * again (admin2#170).
+     *
+     * Resolved by walking the real hierarchy, never by trimming the route:
+     * with `system.home.hide_in_urls` a route can be missing its home segment,
+     * and string-splitting it lands on the wrong page (admin2#132).
+     */
+    private static function previewRenderTarget(PageInterface $page): PageInterface
+    {
+        $seen = [];
+
+        while ($page->isModule()) {
+            $seen[(string) $page->path()] = true;
+            $parent = $page->parent();
+            if ($parent === null || $parent->root() || isset($seen[(string) $parent->path()])) {
+                break;
+            }
+            $page = $parent;
+        }
+
+        return $page;
+    }
+
+    /**
+     * The fragment that scrolls a preview to the module being previewed.
+     *
+     * There is no core convention for this, so it is advisory: our themes give
+     * each module an element whose id is the module's menu label hyphenized
+     * (see Quark 2's `modular.html.twig`), and a theme that emits nothing of
+     * the sort simply lands at the top of the parent page.
+     */
+    private static function previewAnchor(PageInterface $page): ?string
+    {
+        $label = trim((string) $page->menu());
+        if ($label === '') {
+            return null;
+        }
+
+        $anchor = Inflector::hyphenize($label);
+
+        return $anchor === '' ? null : $anchor;
     }
 
     /**
@@ -447,6 +599,16 @@ class PagesController extends AbstractApiController
 
             $this->authorizePageAction($request, $parent, 'create', self::PERMISSION_WRITE);
 
+            // A page whose folder starts with `_` is a module whichever `kind`
+            // asked for it, and a module needs a template that exists (#55).
+            // A folder writes no .md, so its template is never used.
+            $module = $kind !== 'folder' && str_starts_with($slug, '_');
+            if ($kind === 'folder') {
+                $template = is_string($template) ? $template : 'default';
+            } else {
+                $template = $this->resolveTemplate($template, $module, array_key_exists('template', $body));
+            }
+
             // Resolve `order: "auto"` against existing siblings: if any sibling
             // carries a numeric prefix, assign the next number; otherwise leave
             // the new page unprefixed. Mirrors admin-classic's add-page flow.
@@ -460,8 +622,10 @@ class PagesController extends AbstractApiController
             $dirName = $order !== null ? PageOrdering::key($order, $slug, $this->siblingDigits($parentPath)) : $slug;
             $pagePath = $parentPath . '/' . $dirName;
 
-            if (is_dir($pagePath)) {
-                throw new ValidationException("A page already exists at route: {$route}");
+            // Grav routes by slug, so `02._dup` and `03._dup` would claim the same
+            // route: refuse the slug when a sibling has it under any order prefix.
+            if (($clash = $this->findSlugClash($parentPath, $dirName)) !== null) {
+                throw new ValidationException("A page already exists at route: {$route} (folder '{$clash}').");
             }
 
             // Build header: blueprint field defaults sit lowest, then the
@@ -475,6 +639,10 @@ class PagesController extends AbstractApiController
                 ['title' => $title],
                 $header,
             );
+
+            if ($module) {
+                $this->assertModuleDisplayTemplate($header['template'] ?? null, null);
+            }
 
             // Enforce security.twig_content.* gate before any plugin event can
             // mutate the header — reject the create up-front if the request
@@ -554,6 +722,192 @@ class PagesController extends AbstractApiController
         } finally {
             $this->restoreLanguage($previousLang);
         }
+    }
+
+    /**
+     * Check the `template` a create or a template switch asked for, and return
+     * it the way Grav reports it (`modular/<name>` for a module).
+     *
+     * The page file is named after the template, so anything that is not a
+     * plain name is refused. buildPageFilename() would otherwise quietly turn
+     * `modular/text` on an ordinary page into `text.md`, and an empty value
+     * into a hidden `.md`.
+     *
+     * A module's template also has to exist. A module whose template Twig
+     * cannot find makes its parent render core's red "template not found"
+     * heading in front of visitors (#55), where an ordinary page just falls
+     * back to the theme's `default.html.twig`. That is why only modules are
+     * checked: a headless site may use page types no theme or blueprint
+     * knows, and those keep working.
+     *
+     * @param bool $given false when the caller sent no `template` and the
+     *                    `default` stand-in is what is being checked
+     * @throws ValidationException
+     */
+    private function resolveTemplate(mixed $template, bool $module, bool $given = true): string
+    {
+        if (!is_string($template) || trim($template) === '') {
+            throw $this->templateError('template', "The 'template' field must be a non-empty string.");
+        }
+
+        $template = trim($template);
+        // A module's template is named either way: the admin sends the
+        // `modular/text` its type list holds, other callers send `text`.
+        $name = $module && str_starts_with($template, 'modular/') ? substr($template, 8) : $template;
+
+        if ($name === '' || $name[0] === '.' || strpbrk($name, '/\\') !== false) {
+            throw $this->templateError('template', !$module && str_starts_with($template, 'modular/')
+                ? "Template '{$template}' is a modular type, which only a module can use. Create it with kind 'module'."
+                : "Invalid template '{$template}': it must be a template name, not a path.");
+        }
+
+        if (!$module) {
+            return $name;
+        }
+
+        $template = 'modular/' . $name;
+        $types = $this->modularTypes();
+        if ($types === null) {
+            return $template;
+        }
+
+        // Matched without regard to case and returned as registered, so `Hero`
+        // does not become a `Hero.md` that only renders on a case-insensitive
+        // filesystem.
+        foreach ($types as $type) {
+            if (strcasecmp($type, $template) === 0) {
+                return $type;
+            }
+        }
+
+        if ($this->twigTemplateExists($template)) {
+            return $template;
+        }
+
+        throw $this->templateError('template', ($given
+            ? "Template '{$template}' is not a modular type on this site. "
+            : "A module needs a 'template'. ") . $this->modularTypesHint($types));
+    }
+
+    /**
+     * Whether `$template` names the template the page already has, in either
+     * spelling for a module (`text` or `modular/text`).
+     */
+    private function isCurrentTemplate(mixed $template, PageInterface $page): bool
+    {
+        if (!is_string($template)) {
+            return false;
+        }
+
+        $template = trim($template);
+        $current = (string) $page->template();
+
+        return strcasecmp($template, $current) === 0
+            || ($page->isModule() && strcasecmp('modular/' . $template, $current) === 0);
+    }
+
+    /**
+     * Check a `template` header a module is being given.
+     *
+     * Core reads that header before the file name, and for a module a
+     * template Twig cannot find ends in the same red heading (#55). It names
+     * any Twig template, so it is checked as written.
+     *
+     * @throws ValidationException
+     */
+    private function assertModuleDisplayTemplate(mixed $new, mixed $old): void
+    {
+        if ($new === null || $new === '' || $new === $old) {
+            return;
+        }
+
+        $types = $this->modularTypes();
+        if ($types === null) {
+            return;
+        }
+
+        if (is_string($new) && (in_array(trim($new), $types, true) || $this->twigTemplateExists(trim($new)))) {
+            return;
+        }
+
+        $shown = is_string($new) ? $new : gettype($new);
+        throw $this->templateError(
+            'header.template',
+            "The 'template' header '{$shown}' is not a template this module can render with. " . $this->modularTypesHint($types),
+        );
+    }
+
+    /**
+     * The registered modular types: what the theme's and plugins' blueprints
+     * and `templates/modular/` folders declare, and what the admin offers.
+     *
+     * @return list<string>|null null when the registry cannot be asked
+     */
+    private function modularTypes(): ?array
+    {
+        $pages = $this->grav['pages'];
+        if (!method_exists($pages, 'types') || !method_exists($pages, 'modularTypes')) {
+            return null;
+        }
+
+        try {
+            // Core always registers `default`, so an empty list of page types
+            // means the registry was never built (the theme was not ready).
+            if (!$pages::types()) {
+                return null;
+            }
+
+            return array_map('strval', array_keys($pages::modularTypes()));
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether Twig can find `<template>.html.twig`, the test core applies when
+     * it renders a module.
+     *
+     * A plugin that only adds a Twig path never registers its templates as
+     * types (lightbox-gallery's `modular/lightbox`), so the type list alone
+     * would refuse modules that render fine.
+     *
+     * `modular/default` is the exception. Core ships that template itself, and
+     * it IS the "template not found" heading, so Twig always finds it. It only
+     * counts when a theme has its own, which registers it as a type.
+     */
+    private function twigTemplateExists(string $template): bool
+    {
+        if ($template === 'modular/default') {
+            return false;
+        }
+
+        try {
+            if (!isset($this->grav['twig'])) {
+                return false;
+            }
+
+            // The API answers ahead of TwigProcessor, so Twig may not be built
+            // yet. init() does nothing once it has run.
+            $twig = $this->grav['twig'];
+            $twig->init();
+
+            return $twig->twig()->getLoader()->exists($template . '.html.twig');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** @param list<string> $types */
+    private function modularTypesHint(array $types): string
+    {
+        return $types
+            ? 'Available modular types: ' . implode(', ', $types) . '.'
+            : 'This site has no modular types: its theme has no templates/modular folder.';
+    }
+
+    private function templateError(string $field, string $message): ValidationException
+    {
+        return new ValidationException($message, [['field' => $field, 'message' => $message]]);
     }
 
     /**
@@ -715,6 +1069,7 @@ class PagesController extends AbstractApiController
 
             if (array_key_exists('header', $body)) {
                 $incoming = (array) $body['header'];
+                $displayTemplate = $this->headerToArray($page->header())['template'] ?? null;
                 if (($body['header_mode'] ?? null) === 'replace') {
                     // Expert (raw-frontmatter) mode sends the COMPLETE header, so
                     // replace it wholesale. Merging would preserve keys the user
@@ -729,6 +1084,11 @@ class PagesController extends AbstractApiController
                     $existing = $this->headerToArray($page->header());
                     $merged = $this->mergePatch($existing, $incoming);
                     $merged = $this->stripNullValues($merged);
+                }
+                // Only a `template` header this request sets or changes is
+                // checked, so a module that already has one keeps saving.
+                if ($page->isModule()) {
+                    $this->assertModuleDisplayTemplate($merged['template'] ?? null, $displayTemplate);
                 }
                 $page->header((object) $merged);
                 // Sync properties that legacy Page caches separately from the
@@ -745,7 +1105,14 @@ class PagesController extends AbstractApiController
             $templateChanged = false;
             $oldFilePath = null;
             $previousTemplate = null;
-            if (array_key_exists('template', $body) && $body['template'] !== $page->template()) {
+            // A module reports `modular/text` and callers send either that or
+            // `text`. Its own template in either spelling is not a switch: it
+            // used to be treated as one, and the "old" file removed after the
+            // save was the page's only file (#55). Sending a page's template
+            // back unchanged also has to keep working when that type is no
+            // longer registered, as after a theme switch.
+            if (array_key_exists('template', $body) && !$this->isCurrentTemplate($body['template'], $page)) {
+                $newTemplate = $this->resolveTemplate($body['template'], $page->isModule());
                 $previousTemplate = $page->template();
                 // The page FILENAME is the template basename only. For modular
                 // modules Grav's template() returns a `modular/<name>` form, so
@@ -754,9 +1121,12 @@ class PagesController extends AbstractApiController
                 // leave the original module untouched (admin2#69). buildPageFilename()
                 // strips the prefix (basename) and handles the language extension.
                 $lang = $page->language() ?: null;
-                $oldFilePath = $page->path() . '/' . $this->buildPageFilename($page->template(), $lang);
-                $page->template($body['template']);
-                $page->name($this->buildPageFilename($body['template'], $lang));
+                // The file the page was loaded from. template() is no guide to
+                // it when a `template` header overrides the display template.
+                $oldFilePath = $page->filePath()
+                    ?: $page->path() . '/' . $this->buildPageFilename($previousTemplate, $lang);
+                $page->template($newTemplate);
+                $page->name($this->buildPageFilename($newTemplate, $lang));
                 $templateChanged = true;
             }
 
@@ -788,8 +1158,9 @@ class PagesController extends AbstractApiController
 
             $page->save();
 
-            // Remove old template file after successful save
-            if ($templateChanged && $oldFilePath && file_exists($oldFilePath)) {
+            // Remove old template file after successful save, unless the save
+            // went to that same file.
+            if ($templateChanged && $oldFilePath && $oldFilePath !== $page->filePath() && file_exists($oldFilePath)) {
                 unlink($oldFilePath);
             }
 
@@ -839,9 +1210,14 @@ class PagesController extends AbstractApiController
 
             // If a specific language is requested, delete only that language file
             if ($lang && $this->isMultiLangEnabled()) {
+                // Removing the last translation removes the whole folder.
+                if (count($page->translatedLanguages()) <= 1) {
+                    $this->assertDescendantsNotDenied($request, $page, 'delete');
+                }
+
                 $this->fireEvent('onApiBeforePageDelete', ['page' => $page, 'lang' => $lang]);
 
-                $this->deleteLanguageFile($page, $lang);
+                $this->deleteLanguageFile($page, $lang, $includeChildren);
                 $this->clearPagesCache();
 
                 $this->fireAdminEvent('onAdminAfterDelete', ['object' => $page, 'page' => $page]);
@@ -857,6 +1233,8 @@ class PagesController extends AbstractApiController
                     'This page has children. Use ?children=true to confirm deletion of the page and all its children.'
                 );
             }
+
+            $this->assertDescendantsNotDenied($request, $page, 'delete');
 
             $this->fireEvent('onApiBeforePageDelete', ['page' => $page]);
 
@@ -951,8 +1329,10 @@ class PagesController extends AbstractApiController
             throw new ValidationException('Source and destination paths are identical.');
         }
 
-        if (is_dir($newPath)) {
-            throw new ValidationException("A page already exists at the destination path.");
+        // The page's own folder is about to vacate, so it is not a clash (moving
+        // `02.foo` to `05.foo` within one parent).
+        if (($clash = $this->findSlugClash($newParentPath, $dirName, $oldPath)) !== null) {
+            throw new ValidationException("A page already exists at the destination path (folder '{$clash}').");
         }
 
         Folder::move($oldPath, $newPath);
@@ -1026,9 +1406,11 @@ class PagesController extends AbstractApiController
 
         $destPath = $destParentPath . '/' . $destSlug;
 
-        if (is_dir($destPath)) {
-            throw new ValidationException("A page already exists at route: {$destRoute}");
+        if (($clash = $this->findSlugClash($destParentPath, $destSlug)) !== null) {
+            throw new ValidationException("A page already exists at route: {$destRoute} (folder '{$clash}').");
         }
+
+        $this->assertDescendantsNotDenied($request, $page, 'read');
 
         $sourcePath = $page->path();
         Folder::copy($sourcePath, $destPath);
@@ -1224,7 +1606,7 @@ class PagesController extends AbstractApiController
         $body = $this->getRequestBody($request);
         $this->requireFields($body, ['lang']);
 
-        $lang = (string) $body['lang'];
+        $lang = $body['lang'];
         $this->validateLanguageCode($lang);
 
         if (!$this->isMultiLangEnabled()) {
@@ -1311,18 +1693,28 @@ class PagesController extends AbstractApiController
      */
     public function siteLanguages(ServerRequestInterface $request): ResponseInterface
     {
+        return ApiResponse::create($this->siteLanguagesData($request));
+    }
+
+    /**
+     * The payload of GET /languages, shared with GET /admin-next/boot.
+     *
+     * @return array<string, mixed>
+     */
+    public function siteLanguagesData(ServerRequestInterface $request): array
+    {
         $this->requirePermission($request, self::PERMISSION_READ);
 
         /** @var Language $language */
         $language = $this->grav['language'];
 
         if (!$language->enabled()) {
-            return ApiResponse::create([
+            return [
                 'enabled' => false,
                 'languages' => [],
                 'default' => null,
                 'active' => null,
-            ]);
+            ];
         }
 
         $langs = $language->getLanguages();
@@ -1346,7 +1738,7 @@ class PagesController extends AbstractApiController
             'active' => $language->getActive() ?: $default,
         ];
 
-        return ApiResponse::create($data);
+        return $data;
     }
 
     /**
@@ -1406,6 +1798,12 @@ class PagesController extends AbstractApiController
                 );
             }
 
+            // The write lands on the target translation, which carries its own
+            // frontmatter and so its own rules. Checking only the source let a
+            // translation that denies editing be overwritten from another
+            // language, its permissions block included.
+            $this->authorizePageAction($request, $targetPage, 'update', self::PERMISSION_WRITE);
+
             $this->fireEvent('onApiBeforePageSync', [
                 'page' => $targetPage,
                 'source_lang' => $sourceLang,
@@ -1461,9 +1859,10 @@ class PagesController extends AbstractApiController
     public function compare(ServerRequestInterface $request): ResponseInterface
     {
         // Account-wide gate up front (this endpoint reads a page that may not
-        // resolve at all); a page-level deny is applied below, once the source
-        // page is loaded. Both language variants share the same frontmatter
-        // rules, so checking the source covers the pair.
+        // resolve at all); a page-level deny is applied below to each side as
+        // it loads. Each translation carries its own frontmatter, and when the
+        // source doesn't resolve the target is the only page checked at all,
+        // so both sides need their own check.
         $this->requirePermission($request, self::PERMISSION_READ);
 
         $params = $request->getQueryParams();
@@ -1491,6 +1890,8 @@ class PagesController extends AbstractApiController
             $sourceData = null;
             if ($sourcePage) {
                 $this->assertPageNotDenied($request, $sourcePage, 'read');
+                // Same gate show() applies to a page with Twig in its content.
+                $this->guardTwigContent($request, $sourcePage, []);
                 $translated = $sourcePage->translatedLanguages();
                 $sourceData = [
                     'lang' => $sourceLang,
@@ -1510,6 +1911,8 @@ class PagesController extends AbstractApiController
 
             $targetData = null;
             if ($targetPage) {
+                $this->assertPageNotDenied($request, $targetPage, 'read');
+                $this->guardTwigContent($request, $targetPage, []);
                 $translated = $targetPage->translatedLanguages();
                 $targetData = [
                     'lang' => $targetLang,
@@ -1559,16 +1962,32 @@ class PagesController extends AbstractApiController
         $parentPath = $parent->path();
         $children = $parent->children();
 
-        // Build a map of slug -> current directory name
+        // Build a map of slug -> current directory name. Grav routes by slug, so a
+        // slug two children share (under different order prefixes) cannot be told
+        // apart here; keep every folder so it can be refused below instead of
+        // letting the last one win.
         $childMap = [];
+        $dirsBySlug = [];
         foreach ($children as $child) {
-            $childMap[$child->slug()] = basename($child->path());
+            $dir = basename($child->path());
+            $childMap[$child->slug()] = $dir;
+            $dirsBySlug[$child->slug()][] = $dir;
         }
 
-        // Validate all slugs exist
+        // Validate all slugs exist, are listed once, and name exactly one folder
+        $listed = [];
         foreach ($order as $slug) {
-            if (!isset($childMap[$slug])) {
-                throw new ValidationException("Child page with slug '{$slug}' not found under '{$parent->route()}'.");
+            if (!is_string($slug) || !isset($childMap[$slug])) {
+                throw new ValidationException("Child page with slug '" . (is_string($slug) ? $slug : gettype($slug)) . "' not found under '{$parent->route()}'.");
+            }
+            if (isset($listed[$slug])) {
+                throw new ValidationException("Child page with slug '{$slug}' is listed more than once.");
+            }
+            $listed[$slug] = true;
+            if (count($dirsBySlug[$slug]) > 1) {
+                throw new ValidationException(
+                    "More than one child of '{$parent->route()}' has the slug '{$slug}' (" . implode(', ', $dirsBySlug[$slug]) . "). Rename or delete one before reordering."
+                );
             }
         }
 
@@ -1582,38 +2001,12 @@ class PagesController extends AbstractApiController
                 $digits = $w;
             }
         }
-        $reorderDigits = $digits ?: null;
 
-        $tempRenames = [];
-        $position = 1;
-
-        foreach ($order as $slug) {
-            $currentDir = $childMap[$slug];
-            $newDir = PageOrdering::key($position, $slug, $reorderDigits);
-
-            if ($currentDir !== $newDir) {
-                $oldPath = $parentPath . '/' . $currentDir;
-                // Use temp name to avoid conflicts during rename
-                $tempPath = $parentPath . '/_temp_' . $position . '_' . $slug;
-                $tempRenames[] = [
-                    'temp' => $tempPath,
-                    'final' => $parentPath . '/' . $newDir,
-                    'old' => $oldPath,
-                ];
-                if (is_dir($oldPath)) {
-                    rename($oldPath, $tempPath);
-                }
-            }
-
-            $position++;
-        }
-
-        // Now rename from temp to final names
-        foreach ($tempRenames as $rename) {
-            if (is_dir($rename['temp'])) {
-                rename($rename['temp'], $rename['final']);
-            }
-        }
+        // Every target name is checked before the first folder moves, and a
+        // failure part-way puts the folders back, so a bad request can no longer
+        // strand children under `_temp_` names.
+        $plan = $this->planReorder($parentPath, $childMap, $order, $digits ?: null, $parent->route());
+        $this->applyRenames($plan);
 
         $this->clearPagesCache();
 
@@ -1699,11 +2092,16 @@ class PagesController extends AbstractApiController
         foreach ($pages as $route => $page) {
             try {
                 $this->assertPageNotDenied($request, $page, ...$pageActions);
+                // Delete and copy take the whole folder, so every page below
+                // this one has to allow the same action.
+                if ($operation === 'delete' || $operation === 'copy') {
+                    $this->assertDescendantsNotDenied($request, $page, ...$pageActions);
+                }
                 match ($operation) {
                     'publish' => $this->batchPublish($page, $route, true),
                     'unpublish' => $this->batchPublish($page, $route, false),
                     'delete' => $this->batchDelete($page, $route),
-                    'copy' => $copied[$route] = $this->batchCopy($page, $options),
+                    'copy' => $copied[$route] = $this->batchCopy($request, $page, $options),
                 };
                 $results[] = ['route' => $route, 'status' => 'success'];
             } catch (\Throwable $e) {
@@ -1922,6 +2320,30 @@ class PagesController extends AbstractApiController
             }
         }
 
+        // Grav routes by slug, so a page landing under a new parent must not share
+        // its slug with a page already there, or with another page landing there,
+        // whatever their order prefixes. Folders that move in this batch vacate
+        // their old name. A reorder within one parent creates no new clash, so a
+        // clash that was already on disk never blocks renumbering.
+        $vacating = array_map(static fn (array $op): string => (string) $op['oldPath'], $resolved);
+        $landing = [];
+        foreach ($resolved as $op) {
+            $landingKey = rtrim((string) $op['newParentPath'], '/') . "\0" . $op['slug'];
+            $landing[$landingKey] = ($landing[$landingKey] ?? 0) + 1;
+        }
+        foreach ($resolved as $index => $op) {
+            if ($op['newParentPath'] === null || $op['newParentRoute'] === $op['currentParentRoute']) {
+                continue;
+            }
+            $landingKey = rtrim((string) $op['newParentPath'], '/') . "\0" . $op['slug'];
+            if ($landing[$landingKey] > 1
+                || $this->findSlugClash($op['newParentPath'], $op['slug'], $vacating) !== null) {
+                throw new ValidationException(
+                    "A page with the slug '{$op['slug']}' already exists under '{$op['newParentRoute']}' (operation index {$index})."
+                );
+            }
+        }
+
         $this->fireEvent('onApiBeforePagesReorganize', ['operations' => $resolved]);
 
         // --- Phase 2: Move to temp names ---
@@ -2067,10 +2489,26 @@ class PagesController extends AbstractApiController
 
         // Simplify: return just taxonomy type => [values] without internal file paths
         foreach ($raw as $type => $values) {
-            $taxonomy[$type] = array_keys($values);
+            $taxonomy[$type] = self::taxonomyValueList((array) $values);
         }
 
         return ApiResponse::create($taxonomy);
+    }
+
+    /**
+     * The values in use for one taxonomy type, as a list of strings.
+     *
+     * Core keys its taxonomy map by value, and PHP turns a key that looks like
+     * an integer ("2024") into an int. array_keys() alone therefore sent year
+     * tags and the like as JSON numbers, where the documented response and its
+     * clients expect strings (getgrav/grav-plugin-admin2#186).
+     *
+     * @param array<int|string, mixed> $values Core's map for one type, keyed by value.
+     * @return list<string>
+     */
+    private static function taxonomyValueList(array $values): array
+    {
+        return array_map('strval', array_keys($values));
     }
 
     // -------------------------------------------------------------------------
@@ -2148,19 +2586,23 @@ class PagesController extends AbstractApiController
     }
 
     /**
-     * Collect all page instances and apply filters.
+     * Collect all page instances and apply filters, plus the free-text search
+     * when one is given.
      *
      * @param iterable<string, PageInterface> $instances
      * @return list<PageInterface>
      */
-    private function collectAndFilterPages(iterable $instances, array $filters): array
+    private function collectAndFilterPages(iterable $instances, array $filters, ?string $search = null): array
     {
         $pages = [];
 
         foreach ($instances as $page) {
-            // Skip the virtual pages-root container (no file on disk).
-            // The home page is a real file-backed page with route '/'.
-            if (!$page->route() || !$page->exists()) {
+            // Skip the virtual pages-root container (no file on disk). The home
+            // page is a real file-backed page with route '/', and a page
+            // carrying `routes.default: ''` is a real page whose route is the
+            // empty string, so ask root() rather than testing the route for
+            // truthiness (getgrav/grav-plugin-api#34).
+            if ($page->root() || !self::hasContentFile($page)) {
                 continue;
             }
 
@@ -2168,10 +2610,52 @@ class PagesController extends AbstractApiController
                 continue;
             }
 
+            if ($search !== null && !self::matchesSearch($page, $search)) {
+                continue;
+            }
+
             $pages[] = $page;
         }
 
         return $pages;
+    }
+
+    /**
+     * The `search` query parameter, trimmed, or null when there is none.
+     *
+     * @param array<string, mixed> $query
+     */
+    private static function searchTerm(array $query): ?string
+    {
+        $search = $query['search'] ?? null;
+        if (!is_string($search)) {
+            return null;
+        }
+        $search = trim($search);
+
+        return $search === '' ? null : $search;
+    }
+
+    /**
+     * Free-text page search for sites without Flex pages.
+     *
+     * Mirrors what the Flex pages directory does with `?search=` (its
+     * `data.search` config in `system/blueprints/flex/pages.yaml`): a
+     * case-insensitive substring match on the title, the menu label, the slug
+     * and the route (the Flex config's `key` entry). Both the public route and
+     * the raw one (`/home` for a hidden home page) are tested. Without this the
+     * regular-pages path ignored `search` and returned every page.
+     */
+    private static function matchesSearch(PageInterface $page, string $search): bool
+    {
+        foreach ([$page->title(), $page->menu(), $page->slug(), $page->route(), $page->rawRoute()] as $value) {
+            // What Utils::contains($value, $search, false) does, which Flex uses.
+            if (is_string($value) && $value !== '' && mb_stripos($value, $search) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2185,12 +2669,14 @@ class PagesController extends AbstractApiController
                 'template' => $page->template() === $value,
                 'routable' => $page->routable() === filter_var($value, FILTER_VALIDATE_BOOLEAN),
                 'visible' => $page->visible() === filter_var($value, FILTER_VALIDATE_BOOLEAN),
-                'parent' => str_starts_with($page->route(), '/' . trim($value, '/')),
+                'parent' => self::routeStartsWith($page, '/' . trim($value, '/')),
                 'children_of' => $this->isDirectChildOf($page, $value),
                 // Root-level = direct child of the pages-root, resolved from the
                 // real hierarchy (see isDirectChildOf) so home-page children
-                // aren't mistaken for top-level pages.
-                'root' => filter_var($value, FILTER_VALIDATE_BOOLEAN) && $this->isDirectChildOf($page, '/'),
+                // aren't mistaken for top-level pages. Compared like the other
+                // boolean filters, so root=false means "non-root pages only"
+                // rather than `false && …`, which excluded every page.
+                'root' => $this->isDirectChildOf($page, '/') === filter_var($value, FILTER_VALIDATE_BOOLEAN),
                 default => true,
             };
 
@@ -2214,6 +2700,28 @@ class PagesController extends AbstractApiController
      * (getgrav/grav-plugin-admin2#32). Comparing against the actual parent
      * page, like admin-classic's tree does, keeps the hierarchy correct.
      */
+    /**
+     * Does either of the page's routes start with the given prefix?
+     *
+     * The `parent` filter matches on the public route, which a route alias can
+     * rewrite. A page carrying `routes.default: ''` has an empty public route
+     * and so could never prefix-match anything, which left it unreachable
+     * through this filter (getgrav/grav-plugin-api#34). The structural route is
+     * always present, so testing both keeps existing public-route matches
+     * working while letting an aliased page still be found by where it actually
+     * lives in the tree.
+     */
+    private static function routeStartsWith(PageInterface $page, string $prefix): bool
+    {
+        foreach ([$page->route(), $page->rawRoute()] as $route) {
+            if (is_string($route) && $route !== '' && str_starts_with($route, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function isDirectChildOf(PageInterface $page, string $parentValue): bool
     {
         $parent = $page->parent();
@@ -2238,7 +2746,36 @@ class PagesController extends AbstractApiController
             || $parentRoute === $parent->route();
     }
 
-    private function indexViaDefaultSort(ServerRequestInterface $request, string $parentRoute, array $filters, array $pagination): ResponseInterface
+    private function indexViaDefaultSort(ServerRequestInterface $request, string $parentRoute, array $filters, array $pagination, ?string $search = null): ResponseInterface
+    {
+        $items = $this->defaultOrderedChildren($filters, $search);
+
+        $total = count($items);
+        $locatedAt = $this->applyLocate($items, $pagination, $request->getQueryParams()['locate'] ?? null);
+        $slice = array_slice($items, $pagination['offset'], $pagination['limit']);
+
+        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, $this->listOptions($request)));
+
+        return ApiResponse::paginated(
+            data: $data,
+            total: $total,
+            page: $pagination['page'],
+            perPage: $pagination['per_page'],
+            baseUrl: $this->getApiBaseUrl() . '/pages',
+            locatedAtIndex: $locatedAt,
+            query: $request->getQueryParams(),
+        );
+    }
+
+    /**
+     * The direct children of `$filters['children_of']` that pass the other
+     * filters and the search, in the folder's own order: the parent's
+     * collection ordering when it sets one, otherwise numbered folders first
+     * (ascending) and then unnumbered ones by slug. This is `sort=default`.
+     *
+     * @return list<PageInterface>
+     */
+    private function defaultOrderedChildren(array $filters, ?string $search = null): array
     {
         // Collect direct children and find parent using Flex or Pages service
         $directory = $this->getFlexDirectory('pages');
@@ -2247,13 +2784,37 @@ class PagesController extends AbstractApiController
 
         $items = [];
         if ($directory) {
-            foreach ($directory->getCollection() as $page) {
+            // The search narrows the children, not the parent lookup below, so
+            // take the matching keys from Flex's own search up front.
+            $searchKeys = null;
+            if ($search !== null) {
+                $searchKeys = [];
+                foreach ($directory->getCollection()->search($search) as $match) {
+                    if ($match instanceof PageInterface) {
+                        $searchKeys[(string) $match->getKey()] = true;
+                    }
+                }
+            }
+
+            // Read the folder's own children rather than walking every page to
+            // find them (and the folder). When the folder can't be resolved
+            // that way, fall back to the walk.
+            $collection = $directory->getCollection();
+            $folder = $this->flexFolderChildren($directory, $collection, $childRoute);
+            if ($folder !== null) {
+                $parent = $folder['parent'];
+                $source = $collection->select($folder['keys']);
+            } else {
+                $source = $collection;
+            }
+
+            foreach ($source as $page) {
                 if (!$page instanceof PageInterface) {
                     continue;
                 }
                 // Match by rawRoute too: the home page's public route is '/'
                 // while the frontend asks for its structural route (e.g. '/home').
-                if ($page->route() === $childRoute || $page->rawRoute() === $childRoute) {
+                if ($folder === null && ($page->route() === $childRoute || $page->rawRoute() === $childRoute)) {
                     $parent = $page;
                 }
                 // matchesFilters() covers children_of (via isDirectChildOf) *and*
@@ -2261,15 +2822,18 @@ class PagesController extends AbstractApiController
                 // isDirectChildOf here silently dropped those boolean filters on
                 // the default-sort path used by the tree and columns views —
                 // the same class of bug as getgrav/grav-plugin-admin2#121.
-                if ($this->matchesFilters($page, $filters)) {
+                if (
+                    $this->matchesFilters($page, $filters)
+                    && ($searchKeys === null || isset($searchKeys[(string) $page->getKey()]))
+                ) {
                     $items[] = $page;
                 }
             }
         } else {
             $this->enablePages();
-            $parent = $this->grav['pages']->find($childRoute);
-            $allPages = $this->collectAndFilterPages($this->grav['pages']->instances(), $filters);
-            $items = $allPages;
+            $pages = $this->grav['pages'];
+            $parent = $pages->find($childRoute);
+            $items = $this->collectAndFilterPages($this->candidatePages($pages, $filters), $filters, $search);
         }
 
         // Check parent's collection ordering (e.g. blog ordered by date desc)
@@ -2338,31 +2902,169 @@ class PagesController extends AbstractApiController
             $items = array_merge($ordered, $unordered);
         }
 
-        $total = count($items);
-        $locatedAt = $this->applyLocate($items, $pagination, $request->getQueryParams()['locate'] ?? null);
-        $slice = array_slice($items, $pagination['offset'], $pagination['limit']);
+        return $items;
+    }
 
-        $includeTranslations = filter_var(
-            $request->getQueryParams()['translations'] ?? false,
-            FILTER_VALIDATE_BOOLEAN
-        );
+    /**
+     * The Flex pages directly under a folder, read from the folder's own list of
+     * children instead of asking every page on the site for its parent.
+     *
+     * Returns the page whose route or structural route is the folder's (the
+     * one a `sort=default` listing takes its collection ordering from: for `/`
+     * that is the home page, whose public route is `/`) and the children's
+     * keys in the collection's own order, limited to what is in $collection.
+     * Callers still apply every filter to those children, so the result is the
+     * same as a full walk. Null when the folder doesn't resolve by its key to a
+     * page with that route (an alias, a canonical URL, no page at all); the
+     * caller then walks every page, as before.
+     *
+     * @return array{parent: ?PageInterface, keys: list<string>}|null
+     */
+    private function flexFolderChildren(FlexDirectory $directory, iterable $collection, string $parentValue): ?array
+    {
+        if (!method_exists($collection, 'getKeys')) {
+            return null;
+        }
 
-        $data = $this->attachPageCapabilities($request, $slice, $this->serializer->serializeCollection($slice, [
+        $parentRoute = '/' . trim($parentValue, '/');
+        if ($parentRoute === '/') {
+            $index = $directory->getIndex();
+            $folder = method_exists($index, 'getRoot') ? $index->getRoot() : null;
+
+            $alias = trim((string) $this->config->get('system.home.alias', '/home'), '/');
+            $parent = $alias !== '' ? $directory->getObject($alias) : null;
+            if (!$parent instanceof PageInterface || $parent->route() !== '/') {
+                return null;
+            }
+        } else {
+            $folder = $directory->getObject(ltrim($parentRoute, '/'));
+            if (!$folder instanceof PageInterface
+                || ($folder->rawRoute() !== $parentRoute && $folder->route() !== $parentRoute)) {
+                return null;
+            }
+            $parent = $folder;
+        }
+
+        if (!$folder instanceof PageInterface || !method_exists($folder, 'getMetaData') || !method_exists($folder, 'getMasterKey')) {
+            return null;
+        }
+
+        $meta = $folder->getMetaData();
+        $master = (string) $folder->getMasterKey();
+        $storageKeys = [];
+        foreach (array_keys((array) ($meta['children'] ?? [])) as $child) {
+            $storageKeys[] = $master !== '' ? $master . '/' . $child : (string) $child;
+        }
+
+        $wanted = [];
+        if ($storageKeys !== []) {
+            foreach ($directory->getIndex($storageKeys, 'storage_key') as $child) {
+                if ($child instanceof PageInterface) {
+                    $wanted[(string) $child->getKey()] = true;
+                }
+            }
+        }
+
+        $keys = [];
+        foreach ($collection->getKeys() as $key) {
+            if (isset($wanted[(string) $key])) {
+                $keys[] = $key;
+            }
+        }
+
+        return ['parent' => $parent, 'keys' => $keys];
+    }
+
+    /**
+     * The pages a listing on the regular Pages service has to look at.
+     *
+     * A `children_of` (or `root=true`) listing only needs the parent's own
+     * children, so it reads them from the children index instead of walking
+     * every page and asking each one for its parent. The filters still run on
+     * the result, so what comes back is the same. When the route doesn't
+     * resolve to a page whose route or structural route is that value (an
+     * alias, a canonical URL, or no page at all), it falls back to every page,
+     * which is what the filter has always been tested against.
+     *
+     * @return iterable<PageInterface>
+     */
+    private function candidatePages(\Grav\Common\Page\Pages $pages, array $filters): iterable
+    {
+        $parentValue = $filters['children_of'] ?? null;
+        if ($parentValue === null && isset($filters['root']) && filter_var($filters['root'], FILTER_VALIDATE_BOOLEAN)) {
+            $parentValue = '/';
+        }
+        if (!is_string($parentValue)) {
+            return $pages->instances();
+        }
+
+        $parentRoute = '/' . trim($parentValue, '/');
+        if ($parentRoute === '/') {
+            $parent = $pages->root();
+        } else {
+            $parent = $pages->find($parentRoute, true);
+            if (!$parent instanceof PageInterface
+                || $parent->root()
+                || ($parent->rawRoute() !== $parentRoute && $parent->route() !== $parentRoute)
+            ) {
+                return $pages->instances();
+            }
+        }
+
+        $path = $parent->path();
+        if ($path === null || $path === '') {
+            return $pages->instances();
+        }
+
+        $children = [];
+        foreach ($pages->children($path) as $childPath => $child) {
+            if ($child instanceof PageInterface) {
+                $children[$childPath] = $child;
+            }
+        }
+
+        return $children;
+    }
+
+    /**
+     * Whether a listed page has a content file, i.e. is a page rather than a
+     * bare folder.
+     *
+     * A regular page in the pages index was built by a scan that found its
+     * content file, so knowing it has one is enough; the stat that exists()
+     * makes for every page in a listing is skipped. A folder with no content
+     * file has no file object at all. Anything else still asks exists().
+     */
+    private static function hasContentFile(PageInterface $page): bool
+    {
+        if (get_class($page) === Page::class) {
+            return $page->file() !== null;
+        }
+
+        return $page->exists();
+    }
+
+    /**
+     * Serializer options for page-list rows.
+     *
+     * `fields=summary` leaves out `header` (the page's full frontmatter), which
+     * the admin's tree, list and columns views never read and which is about
+     * half of a 500-row listing. Every other key is unchanged, and without the
+     * parameter the rows are exactly as before.
+     */
+    private function listOptions(ServerRequestInterface $request): array
+    {
+        $query = $request->getQueryParams();
+        $fields = $query['fields'] ?? null;
+
+        return [
             'include_content' => false,
             'render_content' => false,
             'include_children' => false,
             'include_media' => false,
-            'include_translations' => $includeTranslations,
-        ]));
-
-        return ApiResponse::paginated(
-            data: $data,
-            total: $total,
-            page: $pagination['page'],
-            perPage: $pagination['per_page'],
-            baseUrl: $this->getApiBaseUrl() . '/pages',
-            locatedAtIndex: $locatedAt,
-        );
+            'include_translations' => filter_var($query['translations'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'include_header' => !(is_string($fields) && strtolower(trim($fields)) === 'summary'),
+        ];
     }
 
     /**
@@ -2497,7 +3199,7 @@ class PagesController extends AbstractApiController
      * each new page inside this loop would mean a full filesystem walk per
      * item (#23).
      */
-    private function batchCopy(PageInterface $page, array $options): string
+    private function batchCopy(ServerRequestInterface $request, PageInterface $page, array $options): string
     {
         $destParent = $options['destination'] ?? self::structuralParentRoute($page);
         $suffix = $options['suffix'] ?? '-copy';
@@ -2508,6 +3210,7 @@ class PagesController extends AbstractApiController
         $destSlug = $page->slug() . $suffix;
 
         if ($destParent === '/') {
+            $parent = method_exists($this->grav['pages'], 'root') ? $this->grav['pages']->root() : null;
             $destParentPath = $this->grav['locator']->findResource('page://', true);
         } else {
             $parent = $this->grav['pages']->find($destParent);
@@ -2517,8 +3220,14 @@ class PagesController extends AbstractApiController
             $destParentPath = $parent->path();
         }
 
+        // A copy creates a page under the destination, so the destination's own
+        // `create` rule applies, exactly as it does for POST /pages/{route}/copy.
+        if ($parent !== null) {
+            $this->assertPageNotDenied($request, $parent, 'create');
+        }
+
         $destPath = $destParentPath . '/' . $destSlug;
-        if (is_dir($destPath)) {
+        if ($this->findSlugClash($destParentPath, $destSlug) !== null) {
             throw new ValidationException("A page already exists at the copy destination for: {$page->route()}");
         }
 
@@ -2589,10 +3298,155 @@ class PagesController extends AbstractApiController
     }
 
     /**
+     * The folder under $parentPath that already holds the slug of $dirName, or
+     * null. The order prefix is ignored: Grav routes by slug, so `02.foo` and
+     * `03.foo` answer to the same route and one of them never shows in listings.
+     *
+     * @param string      $parentPath Filesystem path of the parent folder.
+     * @param string      $dirName    Folder name about to be created, prefix included.
+     * @param list<string>|string|null $ignorePaths Folder(s) about to vacate (the page being moved).
+     */
+    private function findSlugClash(string $parentPath, string $dirName, array|string|null $ignorePaths = null): ?string
+    {
+        if (!is_dir($parentPath)) {
+            return null;
+        }
+
+        $slug = PageOrdering::parse($dirName)[1];
+        $ignore = array_flip(array_map(
+            static fn (string $path): string => rtrim($path, '/'),
+            (array) $ignorePaths
+        ));
+
+        foreach (scandir($parentPath) ?: [] as $entry) {
+            if ($entry[0] === '.' || !is_dir($parentPath . '/' . $entry)) {
+                continue;
+            }
+            if (isset($ignore[rtrim($parentPath, '/') . '/' . $entry])) {
+                continue;
+            }
+            if (PageOrdering::parse($entry)[1] === $slug) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Work out the renames a reorder needs, refusing the request when a target
+     * name is taken by a folder that is not part of it.
+     *
+     * @param array<string, string> $childMap slug => current folder name
+     * @param list<string>          $order    slugs in their new order
+     * @return list<array{old: string, temp: string, final: string}>
+     */
+    private function planReorder(string $parentPath, array $childMap, array $order, ?int $digits, string $parentRoute): array
+    {
+        $existing = array_flip(array_filter(
+            scandir($parentPath) ?: [],
+            static fn (string $entry): bool => $entry !== '.' && $entry !== '..'
+        ));
+
+        $plan = [];
+        $vacated = [];
+        $position = 1;
+
+        foreach ($order as $slug) {
+            $currentDir = $childMap[$slug];
+            $newDir = PageOrdering::key($position, $slug, $digits);
+
+            if ($currentDir !== $newDir && is_dir($parentPath . '/' . $currentDir)) {
+                $tempDir = '_temp_' . $position . '_' . $slug;
+                $plan[] = [
+                    'old' => $parentPath . '/' . $currentDir,
+                    'temp' => $parentPath . '/' . $tempDir,
+                    'final' => $parentPath . '/' . $newDir,
+                ];
+                $vacated[$currentDir] = true;
+            }
+
+            $position++;
+        }
+
+        // A folder that moves away frees its name; anything else already sitting
+        // on a temp or final name is in the way.
+        foreach ($plan as $rename) {
+            foreach (['temp', 'final'] as $kind) {
+                $name = basename($rename[$kind]);
+                if (isset($existing[$name]) && !isset($vacated[$name])) {
+                    throw new ValidationException(
+                        "Cannot reorder '{$parentRoute}': the folder '{$name}' already exists and is not part of this reorder."
+                    );
+                }
+            }
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Carry out planned renames through temp names, and put every folder back
+     * if any step fails.
+     *
+     * @param list<array{old: string, temp: string, final: string}> $plan
+     */
+    private function applyRenames(array $plan): void
+    {
+        $done = [];
+
+        try {
+            // Temp names first, so a folder can take a name another one is leaving.
+            foreach ($plan as $rename) {
+                $this->renameOrFail($rename['old'], $rename['temp']);
+                $done[] = [$rename['old'], $rename['temp']];
+            }
+            foreach ($plan as $rename) {
+                $this->renameOrFail($rename['temp'], $rename['final']);
+                $done[] = [$rename['temp'], $rename['final']];
+            }
+        } catch (\Throwable $e) {
+            foreach (array_reverse($done) as [$from, $to]) {
+                if (is_dir($to) && !file_exists($from)) {
+                    @rename($to, $from);
+                }
+            }
+
+            throw new \RuntimeException('Reorder failed and was rolled back: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    private function renameOrFail(string $from, string $to): void
+    {
+        if (!@rename($from, $to)) {
+            $reason = error_get_last()['message'] ?? 'rename failed';
+            throw new \RuntimeException($reason);
+        }
+    }
+
+    /**
      * Clear the pages cache after a mutation.
      */
     private function clearPagesCache(): void
     {
+        // Grav 2.2+ can rebuild just the pages index on the next request.
+        // A standard clear also drops compiled config, languages and Twig,
+        // so every save (autosave included) left the next request fully cold.
+        $pages = $this->grav['pages'];
+        if (method_exists($pages, 'markChanged')) {
+            $pages->markChanged();
+
+            // markChanged() only moves core's pages cache id. The listing reads
+            // the Flex pages directory, which keeps its storage keys in its own
+            // index cache for `system.flex.cache.index.lifetime` (60s), so a move,
+            // reorder, copy or delete made by renaming folders would list the old
+            // state until that expires. Page::save() clears the directory itself,
+            // which is why create and update were never affected.
+            $this->getFlexDirectory('pages')?->clearCache();
+
+            return;
+        }
+
         $this->grav['cache']->clearCache('standard');
     }
 
@@ -2755,8 +3609,15 @@ class PagesController extends AbstractApiController
     /**
      * Validate that a language code is configured in the site.
      */
-    private function validateLanguageCode(string $lang): void
+    private function validateLanguageCode(mixed $lang): void
     {
+        // Codes arrive straight from the body or query string, so a JSON number
+        // or a `lang[]=` array can land here. Reject those as a 422 instead of
+        // letting a string type hint turn them into a TypeError (500).
+        if (!is_string($lang) || $lang === '') {
+            throw new ValidationException('Language code must be a non-empty string.');
+        }
+
         /** @var Language $language */
         $language = $this->grav['language'];
 
@@ -2816,7 +3677,7 @@ class PagesController extends AbstractApiController
     /**
      * Delete only a specific language file for a page, preserving other translations.
      */
-    private function deleteLanguageFile(PageInterface $page, string $lang): void
+    private function deleteLanguageFile(PageInterface $page, string $lang, bool $includeChildren = true): void
     {
         $this->validateLanguageCode($lang);
 
@@ -2825,8 +3686,15 @@ class PagesController extends AbstractApiController
             throw new NotFoundException("No translation found for language '{$lang}' at route: {$page->route()}");
         }
 
-        // If this is the only translation, delete the entire page directory
+        // If this is the only translation, delete the entire page directory.
+        // That removes the children too, so honour ?children=false exactly
+        // like a plain delete does instead of wiping the subtree regardless.
         if (count($translated) <= 1) {
+            if (!$includeChildren && $page->children()->count() > 0) {
+                throw new ValidationException(
+                    'This page has children. Use ?children=true to confirm deletion of the page and all its children.'
+                );
+            }
             Folder::delete($page->path());
             return;
         }
@@ -2952,6 +3820,40 @@ class PagesController extends AbstractApiController
             }
         }
         return $data;
+    }
+
+    /**
+     * Whether the caller may read this page on its own route, the same check
+     * show() runs. Used to filter nested children.
+     */
+    private function canReadPage(ServerRequestInterface $request, PageInterface $page): bool
+    {
+        try {
+            $this->authorizePageAction($request, $page, 'read', self::PERMISSION_READ);
+            return true;
+        } catch (ForbiddenException) {
+            return false;
+        }
+    }
+
+    /**
+     * Refuse a folder-level operation (delete, copy) when any page below this
+     * one denies the action. The parent was already authorized, but the
+     * operation takes the whole subtree with it, so a child's own rule would
+     * otherwise be skipped (#47).
+     */
+    private function assertDescendantsNotDenied(ServerRequestInterface $request, PageInterface $page, string ...$actions): void
+    {
+        foreach ($page->children() as $child) {
+            try {
+                $this->assertPageNotDenied($request, $child, ...$actions);
+            } catch (ForbiddenException) {
+                throw new ForbiddenException(
+                    "Page permissions deny '{$actions[0]}' on {$child->rawRoute()}, which is inside this page."
+                );
+            }
+            $this->assertDescendantsNotDenied($request, $child, ...$actions);
+        }
     }
 
     /**

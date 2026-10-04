@@ -9,7 +9,9 @@ use Grav\Common\Grav;
 use Grav\Plugin\Api\Auth\ApiKeyAuthenticator;
 use Grav\Plugin\Api\Auth\AuthenticatorInterface;
 use Grav\Plugin\Api\Auth\JwtAuthenticator;
+use Grav\Plugin\Api\Auth\SameOriginGuard;
 use Grav\Plugin\Api\Auth\SessionAuthenticator;
+use Grav\Plugin\Api\Exceptions\ForbiddenException;
 use Grav\Plugin\Api\Exceptions\UnauthorizedException;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -31,6 +33,13 @@ class AuthMiddleware
         foreach ($this->authenticators as $authenticator) {
             $user = $authenticator->authenticate($request);
             if ($user !== null) {
+                if ($this->isForgeableWrite($authenticator, $request)) {
+                    throw new ForbiddenException(
+                        'This request was signed in by the session cookie alone and did not come from this site. '
+                        . 'Send it from a page on this host, add its origin to the API\'s CORS origins, or authenticate with an API key or token.'
+                    );
+                }
+
                 return $this->attachUser($request, $authenticator, $user);
             }
         }
@@ -51,11 +60,38 @@ class AuthMiddleware
         foreach ($this->authenticators as $authenticator) {
             $user = $authenticator->authenticate($request);
             if ($user !== null) {
+                // A public route still answers, as it would for anybody: the
+                // cookie is just not taken as proof of who is asking.
+                if ($this->isForgeableWrite($authenticator, $request)) {
+                    return $request;
+                }
+
                 return $this->attachUser($request, $authenticator, $user);
             }
         }
 
         return $request;
+    }
+
+    /**
+     * A write whose only credential is the session cookie, arriving from
+     * somewhere that is not this site (CSRF). Keys and JWTs are never asked:
+     * the check belongs to the authenticator that won, not to which headers
+     * happen to be missing, so webhooks and token callers are untouched.
+     */
+    private function isForgeableWrite(AuthenticatorInterface $authenticator, ServerRequestInterface $request): bool
+    {
+        if (!$authenticator instanceof SessionAuthenticator) {
+            return false;
+        }
+
+        $guard = new SameOriginGuard([
+            (string) $this->config->get('system.custom_base_url', ''),
+            (string) $this->config->get('plugins.login.site_host', ''),
+            ...array_values((array) $this->config->get('plugins.api.cors.origins', [])),
+        ]);
+
+        return !$guard->allows($request);
     }
 
     /**
@@ -71,13 +107,56 @@ class AuthMiddleware
         AuthenticatorInterface $authenticator,
         \Grav\Common\User\Interfaces\UserInterface $user,
     ): ServerRequestInterface {
-        $request = $request->withAttribute('api_user', $user);
+        $request = $request
+            ->withAttribute('api_user', $user)
+            ->withAttribute('api_auth_method', match (true) {
+                $authenticator instanceof ApiKeyAuthenticator => 'apikey',
+                $authenticator instanceof JwtAuthenticator => 'jwt',
+                default => 'session',
+            });
 
+        $scopes = [];
         if ($authenticator instanceof ApiKeyAuthenticator) {
-            $request = $request->withAttribute('api_key_scopes', $authenticator->getAuthenticatedScopes());
+            $scopes = $authenticator->getAuthenticatedScopes();
+            $request = $request->withAttribute('api_key_scopes', $scopes);
+        }
+
+        if ($scopes === []) {
+            $this->setActiveUser($user);
         }
 
         return $request;
+    }
+
+    /**
+     * Make the caller Grav's current user, so core, themes and other plugins
+     * reading `$grav['user']` see who is calling rather than a guest (or, since
+     * /api shares the front-end cookie, whoever is logged in to the public site
+     * in the same browser). Classic admin did the same for its requests. (#36)
+     *
+     * Only the container entry changes. The session is left alone, so a visitor
+     * logged in to the front end keeps their own login.
+     *
+     * JWT and API-key accounts come straight from disk, and core's authorize()
+     * refuses a user without `authenticated` and `authorized`, so both are set
+     * here as a login would set them (a JWT access token is only issued once
+     * 2FA has passed). The account file never stores either flag.
+     *
+     * A key with scopes is skipped on purpose: its owner's ACL is wider than the
+     * key, and anything authorizing against `$grav['user']` bypasses the scope
+     * cap. Core's XSS whitelist in Validation::checkSafety() would, for one,
+     * exempt a narrowly scoped key minted on a super-admin account. To core such
+     * a request stays a guest, as it always was.
+     */
+    private function setActiveUser(\Grav\Common\User\Interfaces\UserInterface $user): void
+    {
+        $user->set('authenticated', true);
+        $user->set('authorized', true);
+
+        // Login defines `user` as a service, and Pimple refuses to replace one
+        // that has already been read, so remove it first.
+        unset($this->grav['user']);
+        $this->grav['user'] = $user;
     }
 
     protected function buildAuthenticatorChain(): void

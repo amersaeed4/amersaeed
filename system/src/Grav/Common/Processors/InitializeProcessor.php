@@ -204,17 +204,21 @@ class InitializeProcessor extends ProcessorBase
             }
         }
 
-        // Override configuration using the environment.
+        // Override configuration using the environment. The gate has to read
+        // exactly what the loop below reads: a SAPI that populates only
+        // $_SERVER (Apache SetEnv, nginx fastcgi_param) would otherwise skip
+        // the whole feature with nothing logged, and an empty value must fall
+        // through rather than shadow a working getenv(). (#4279)
         $prefix = 'GRAV_CONFIG';
-        $env = getenv($prefix);
-        if ($env) {
+        $vars = $_ENV + $_SERVER;
+        if (!empty($vars[$prefix]) || getenv($prefix)) {
             $cPrefix = $prefix . '__';
             $aPrefix = $prefix . '_ALIAS__';
             $cLen = strlen($cPrefix);
             $aLen = strlen($aPrefix);
 
             $keys = $aliases = [];
-            $env = $_ENV + $_SERVER;
+            $env = $vars;
             foreach ($env as $key => $value) {
                 if (!str_starts_with((string) $key, $prefix)) {
                     continue;
@@ -458,11 +462,36 @@ class InitializeProcessor extends ProcessorBase
         }
 
         if ($path !== $root && $path !== $root . '/' && Utils::endsWith($path, '/')) {
+            // A real folder, such as user/pages. The web server adds this slash itself
+            // (Apache's mod_dir, nginx, Caddy), so taking it off again sends the visitor
+            // round in a redirect loop (#4325). Leave it and let the request 404.
+            if (static::isFolderOnDisk(substr(rtrim($path, '/'), strlen(rtrim($root, '/'))))) {
+                return null;
+            }
+
             // Use permanent redirect for SEO reasons.
             return $this->container->getRedirectResponse((string)$uri->withPath(rtrim($path, '/')), $code);
         }
 
         return null;
+    }
+
+    /**
+     * Is `$relative` (a URL path below the site root) a real folder in the web root?
+     *
+     * `..` is refused so the check cannot be used to probe for folders outside the site.
+     *
+     * @param string $relative
+     * @return bool
+     */
+    protected static function isFolderOnDisk(string $relative): bool
+    {
+        $relative = trim(rawurldecode($relative), '/');
+        if ($relative === '' || in_array('..', explode('/', $relative), true)) {
+            return false;
+        }
+
+        return is_dir(GRAV_WEBROOT . '/' . $relative);
     }
 
     /**

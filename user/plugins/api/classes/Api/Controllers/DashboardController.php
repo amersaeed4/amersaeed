@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace Grav\Plugin\Api\Controllers;
 
+use Doctrine\Common\Cache\FilesystemCache;
 use Grav\Common\GPM\GPM;
+use Grav\Common\GPM\Remote\GravCore;
+use Grav\Common\GPM\Remote\Plugins as RemotePlugins;
+use Grav\Common\GPM\Remote\Themes as RemoteThemes;
 use Grav\Common\HTTP\Response;
 use Grav\Common\User\DataUser\User as DataUser;
+use Grav\Plugin\Api\Exceptions\ValidationException;
 use Grav\Plugin\Api\FlexBackend;
 use Grav\Plugin\Api\Response\ApiResponse;
+use Grav\Plugin\Api\Services\ExposureProbe;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use RocketTheme\Toolbox\Event\Event;
@@ -136,7 +142,15 @@ class DashboardController extends AbstractApiController
     {
         $this->requirePermission($request, 'api.system.write');
 
-        $id = $this->getRouteParam($request, 'id');
+        $id = (string) $this->getRouteParam($request, 'id');
+        // Every ID we can show is either a getgrav.org number (`201`) or a
+        // plugin slug (`login-lockout`, `api-support.welcome`). Anything else
+        // can't match a notification, and storing it would let a caller grow
+        // the per-user status file with arbitrary keys.
+        if (!self::isValidNotificationId($id)) {
+            throw new ValidationException('Invalid notification ID.');
+        }
+
         $user = $this->getUser($request);
         $username = $user->get('username');
 
@@ -153,6 +167,15 @@ class DashboardController extends AbstractApiController
         $file->save();
 
         return ApiResponse::noContent();
+    }
+
+    /**
+     * Letters, digits, `.`, `_` and `-`, starting with a letter or digit, at
+     * most 64 characters.
+     */
+    public static function isValidNotificationId(string $id): bool
+    {
+        return (bool) preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/', $id);
     }
 
     /**
@@ -231,9 +254,13 @@ class DashboardController extends AbstractApiController
         $publishedPages = 0;
 
         foreach ($allPages as $page) {
-            // Skip the virtual pages-root container (no file on disk); the
-            // home page IS a real file-backed page with route '/'.
-            if (!$page->route() || !$page->exists()) {
+            // Skip the virtual pages-root container (no file on disk); the home
+            // page IS a real file-backed page with route '/', and a page
+            // carrying `routes.default: ''` is a real page whose route is the
+            // empty string. Ask root() rather than testing the route for
+            // truthiness, which was leaving such pages out of the count
+            // (getgrav/grav-plugin-api#34).
+            if ($page->root() || !$page->exists()) {
                 continue;
             }
             $totalPages++;
@@ -262,30 +289,23 @@ class DashboardController extends AbstractApiController
         // Active theme
         $activeTheme = $this->grav['config']->get('system.pages.theme');
 
-        // Available-update counts for the sidebar badges. Read from Grav's cached
-        // GPM data (new GPM(false)) so this stays a fast, network-free lookup — an
-        // empty/never-checked cache simply reports zero updates. Wrapped so a GPM
-        // hiccup can never take down the dashboard.
-        $pluginUpdates = 0;
-        $themeUpdates = 0;
-        $gravUpdatable = false;
-        $activeThemeUpdatable = false;
-        try {
-            $counts = self::extractUpdateCounts(new GPM(false), is_string($activeTheme) ? $activeTheme : null);
-            $pluginUpdates = $counts['plugins'];
-            $themeUpdates = $counts['themes'];
-            $gravUpdatable = $counts['grav'];
-            $activeThemeUpdatable = $counts['active_theme'];
-        } catch (\Throwable $e) {
-            $this->grav['log']->warning('[api] Dashboard stats could not read GPM update counts: ' . $e->getMessage());
-        }
+        // Available-update counts for the sidebar badges, or null for "unknown,
+        // not checked yet". See gpmUpdateCounts(): this never goes to the network.
+        $counts = $this->gpmUpdateCounts(is_string($activeTheme) ? $activeTheme : null);
+        $pluginUpdates = $counts['plugins'] ?? null;
+        $themeUpdates = $counts['themes'] ?? null;
+        $gravUpdatable = $counts['grav'] ?? null;
+        $activeThemeUpdatable = $counts['active_theme'] ?? null;
 
         // Count media files. The recursive walk is O(total files) and runs on a
         // dashboard endpoint, so the tally is cached for a few minutes — a
         // slightly stale count is invisible on a dashboard card, while walking
         // a 10k-file library per visit is not.
-        $mediaDir = $this->grav['locator']->findResource('user://media', true)
-            ?: $this->grav['locator']->findResource('user://images', true);
+        // Only `user://media` counts: that is the one directory the Media
+        // browser lists, so anything else here reports a number the user cannot
+        // reconcile with what they see (`user://images` is a plain assets
+        // folder that plugins and themes write to).
+        $mediaDir = $this->grav['locator']->findResource('user://media', true);
         $totalMedia = 0;
         if ($mediaDir && is_dir($mediaDir)) {
             $cache = $this->grav['cache'];
@@ -294,26 +314,10 @@ class DashboardController extends AbstractApiController
             if (is_int($cached)) {
                 $totalMedia = $cached;
             } else {
-                $iterator = new \RecursiveIteratorIterator(
-                    new \RecursiveDirectoryIterator($mediaDir, \FilesystemIterator::SKIP_DOTS)
-                );
-                foreach ($iterator as $file) {
-                    if (!$file->isFile()) {
-                        continue;
-                    }
-                    // Skip sidecars, not real media: `.meta.yaml` metadata files, the
-                    // per-folder `media_order.yaml`, and hidden dotfiles — the same
-                    // files the media listing excludes.
-                    $name = $file->getFilename();
-                    if (
-                        str_starts_with($name, '.')
-                        || str_ends_with($name, '.meta.yaml')
-                        || $name === 'media_order.yaml'
-                    ) {
-                        continue;
-                    }
-                    $totalMedia++;
-                }
+                // The same walk the media search uses: hidden folders are
+                // skipped whole, with sidecars and dotfiles, so the card never
+                // counts files the media browser cannot show (#50).
+                $totalMedia = iterator_count(MediaController::walkMediaFiles($mediaDir));
                 $cache->save($cacheKey, $totalMedia, 300);
             }
         }
@@ -322,7 +326,9 @@ class DashboardController extends AbstractApiController
         $backupsDir = $this->grav['locator']->findResource('backup://', true);
         $lastBackup = null;
         if ($backupsDir && is_dir($backupsDir)) {
-            $backups = glob($backupsDir . '/*.zip');
+            // Only Grav's own `<name>--<timestamp>.zip` archives, not the exposure
+            // probe's sentinel or anything else that happens to be a zip.
+            $backups = preg_grep('/--\d+\.zip$/', glob($backupsDir . '/*.zip') ?: []);
             if (!empty($backups)) {
                 $latest = max(array_map('filemtime', $backups));
                 $lastBackup = date('c', $latest);
@@ -363,6 +369,111 @@ class DashboardController extends AbstractApiController
     }
 
     /**
+     * Available-update counts from the repository data GPM already has on disk,
+     * or null when there is none to read.
+     *
+     * `new GPM(false)` is not the network-free lookup it looks like: when a
+     * repository file is missing or past its 24 hour lifetime, which includes
+     * straight after every cache clear, it downloads plugins.json and
+     * themes.json (about 2.5 MB each) inside this request. That was the 1 to 2
+     * second dashboard spike. So the cached repository entries are checked
+     * first, and if any is missing or expired the counts are reported as
+     * unknown; `/gpm/updates` or the scheduler refreshes them and the next call
+     * reads them.
+     *
+     * Even with the files present, counting means decoding both repositories
+     * and every installed blueprint, so the result is kept in the Grav cache,
+     * keyed on the repository files and the installed packages' blueprints.
+     *
+     * @return array{plugins: int, themes: int, grav: bool, active_theme: bool}|null
+     */
+    private function gpmUpdateCounts(?string $activeTheme): ?array
+    {
+        try {
+            $gpmDir = $this->grav['locator']->findResource('cache://gpm', true, true);
+            if (!is_string($gpmDir) || !is_dir($gpmDir)) {
+                return null;
+            }
+
+            $channel = (string) $this->grav['config']->get('system.gpm.releases', 'stable');
+            $query = '?v=' . GRAV_VERSION . '&php=' . PHP_VERSION . '&' . $channel . '=1';
+            $repositories = new FilesystemCache($gpmDir);
+            foreach ([RemotePlugins::class, RemoteThemes::class, GravCore::class] as $class) {
+                $url = self::remoteRepositoryUrl($class);
+                if ($url === null || !$repositories->contains(md5($url . $query))) {
+                    return null;
+                }
+            }
+
+            $cache = $this->grav['cache'];
+            $cacheKey = 'api-dashboard-gpm-counts-' . $this->gpmCountsFingerprint($gpmDir, $query, $activeTheme);
+            $cached = $cache->fetch($cacheKey);
+            if (is_array($cached) && isset($cached['plugins'], $cached['themes'], $cached['grav'], $cached['active_theme'])) {
+                return $cached;
+            }
+
+            $counts = self::extractUpdateCounts(new GPM(false), $activeTheme);
+            $cache->save($cacheKey, $counts, 86400);
+
+            return $counts;
+        } catch (\Throwable $e) {
+            // A GPM hiccup must never take down the dashboard.
+            $this->grav['log']->warning('[api] Dashboard stats could not read GPM update counts: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * The repository URL a GPM remote collection reads, from the class's own
+     * default so it cannot drift from core.
+     *
+     * @param class-string $class
+     */
+    private static function remoteRepositoryUrl(string $class): ?string
+    {
+        try {
+            $url = (new \ReflectionProperty($class, 'repository'))->getDefaultValue();
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    /**
+     * Stat-only signature of what the update counts depend on: the GPM
+     * repository files (their mtime moves on every save), the Grav and PHP
+     * versions and release channel baked into the repository query, the active
+     * theme, and each installed plugin's and theme's `blueprints.yaml`, which
+     * is where its version lives.
+     */
+    private function gpmCountsFingerprint(string $gpmDir, string $query, ?string $activeTheme): string
+    {
+        $parts = [$query, (string) $activeTheme];
+
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($gpmDir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($files as $file) {
+            if ($file->isFile()) {
+                $parts[] = $file->getPathname() . ':' . $file->getMTime() . ':' . $file->getSize();
+            }
+        }
+
+        foreach (['plugins://', 'themes://'] as $stream) {
+            foreach ((array) $this->grav['locator']->findResources($stream) as $root) {
+                foreach (glob($root . '/*/blueprints.yaml') ?: [] as $blueprint) {
+                    $parts[] = $blueprint . ':' . (@filemtime($blueprint) ?: 0);
+                }
+            }
+        }
+        sort($parts);
+
+        return md5(implode('|', $parts));
+    }
+
+    /**
      * Reduce a GPM instance to the available-update counts the dashboard needs:
      * number of updatable plugins, number of updatable themes, whether Grav core
      * itself has an update, and whether the currently active theme specifically
@@ -389,59 +500,46 @@ class DashboardController extends AbstractApiController
     }
 
     /**
-     * GET /dashboard/security/exposure-probe
-     *
-     * Returns the public URL of a sentinel file under user/data plus the
-     * random token it contains. The dashboard fetches that URL directly from
-     * the browser: a 200 whose body matches the token means the sensitive
-     * user/ folders are reachable over the web (a misconfigured webserver),
-     * while a 403/404 means they are correctly blocked.
-     *
-     * The sentinel uses a `.dat` extension on purpose — that extension is not
-     * in the legacy per-extension blocklist, so it is only refused when the
-     * folder-wide block (Grav 2.0 / 1.7.53+) is actually in place. A plain
-     * `.txt`/`.yaml` probe would read as "safe" on installs that still expose
-     * certificates, keys and databases stored with other extensions.
+     * Test multiple file types because front proxies may serve only some extensions
+     * themselves. Never probe real submissions, credentials or backup archives.
      */
     public function securityProbe(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, 'api.system.read');
 
-        $dataDir = $this->grav['locator']->findResource('user://data', true, true);
-        $available = false;
-        $token = '';
-
-        if ($dataDir) {
-            if (!is_dir($dataDir)) {
-                @mkdir($dataDir, 0770, true);
+        $rootUrl = rtrim($this->grav['uri']->rootUrl(true), '/');
+        $probes = [];
+        $legacy = ['url' => '', 'token' => '', 'available' => false];
+        foreach (['user://data', 'backup://', 'tmp://'] as $stream) {
+            $directory = $this->grav['locator']->findResource($stream, true, true);
+            if (!is_string($directory) || $directory === '') {
+                continue;
             }
-            $probeFile = $dataDir . '/grav-security-probe.dat';
-
-            // Reuse a stable token so concurrent dashboards don't race each
-            // other into writing different tokens.
-            if (is_file($probeFile)) {
-                $existing = trim((string) @file_get_contents($probeFile));
-                if (preg_match('/^[a-f0-9]{32,}$/', $existing)) {
-                    $token = $existing;
+            $publicPath = ExposureProbe::publicPath($directory, GRAV_WEBROOT);
+            // user/ can be symlinked outside the web root while retaining its public
+            // URL. Use that configured path when the locator resolves the symlink.
+            if ($stream === 'user://data') {
+                $userPath = defined('GRAV_USER_PATH') ? GRAV_USER_PATH : 'user';
+                if (!str_starts_with($userPath, '/') && !preg_match('/^[a-z]:/i', $userPath)) {
+                    $publicPath = ExposureProbe::publicPath(GRAV_WEBROOT . '/' . $userPath . '/data', GRAV_WEBROOT);
                 }
             }
-            if ($token === '') {
-                $token = bin2hex(random_bytes(16));
-                @file_put_contents($probeFile, $token);
+            // Relocated backup/tmp storage outside the web root has no direct URL.
+            if ($publicPath !== null) {
+                $created = ExposureProbe::create($directory, $publicPath, $rootUrl);
+                if ($stream === 'user://data') {
+                    $legacy = $created[0];
+                }
+                array_push($probes, ...$created);
             }
-            $available = is_file($probeFile);
         }
 
-        // Public URL to the sentinel, relative to the site web root (honours a
-        // custom GRAV_USER_PATH and a subfolder install).
-        $userPath = defined('GRAV_USER_PATH') ? trim(GRAV_USER_PATH, '/') : 'user';
-        $rootUrl = rtrim($this->grav['uri']->rootUrl(true), '/');
-        $url = $rootUrl . '/' . $userPath . '/data/grav-security-probe.dat';
-
+        // Keep the original single-probe fields for older Admin2 bundles.
         return ApiResponse::create([
-            'url' => $url,
-            'token' => $token,
-            'available' => $available,
+            'url' => $legacy['url'],
+            'token' => $legacy['token'],
+            'available' => $legacy['available'],
+            'probes' => $probes,
         ]);
     }
 

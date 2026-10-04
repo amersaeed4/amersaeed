@@ -50,6 +50,10 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
     {
         $env = $compiler->getEnvironment();
         $arrayAccessSandbox = false;
+        // GRAV FORK: compile-time source sandboxing (see CompileTimeSourcePolicyInterface), a trusted
+        // template compiles attribute access as if the SandboxExtension were not registered. If lost,
+        // trusted templates keep the checks (slower, still safe).
+        $sandboxed = $env->hasExtension(SandboxExtension::class) && !$this->hasAttribute('sandbox_trusted');
         $nullSafe = $this->getAttribute('null_safe');
 
         // optimize array calls
@@ -64,9 +68,10 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
                 ->raw('(('.$var.' = ')
                 ->subcompile($this->getNode('node'))
                 ->raw(') && is_array(')
-                ->raw($var);
+                ->raw($var)
+            ;
 
-            if (!$env->hasExtension(SandboxExtension::class)) {
+            if (!$sandboxed) {
                 $compiler
                     ->raw(') || ')
                     ->raw($var)
@@ -144,7 +149,7 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
             ->repr($this->getAttribute('type'))
             ->raw(', ')->repr($this->definedTest)
             ->raw(', ')->repr($this->getAttribute('ignore_strict_check'))
-            ->raw(', ')->repr($env->hasExtension(SandboxExtension::class))
+            ->raw(', ')->repr($sandboxed)
             ->raw(', ')->repr($this->getNode('node')->getTemplateLine())
             ->raw(')')
         ;
@@ -167,7 +172,7 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
             $names[] = 'arguments';
         }
 
-        // compileArrayKey() coerces a Stringable key; expose it so the sandbox checks __toString()
+        // compileArrayKey() may coerce a Stringable key; expose it so the sandbox checks __toString()
         if (Template::ARRAY_CALL === $this->getAttribute('type')) {
             $names[] = 'attribute';
         }
@@ -176,10 +181,9 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
     }
 
     /**
-     * Coerces a Stringable array key to string so the optimized path matches
-     * CoreExtension::getAttribute(): only arrays coerce the key, while ArrayAccess
-     * objects (e.g. SplObjectStorage) receive it untouched. Scalars are left to
-     * PHP's native offset coercion.
+     * Normalizes a Stringable array key so optimized access matches getAttribute():
+     * arrays and known string-keyed ArrayAccess implementations receive a string,
+     * while object-key implementations receive the object unchanged.
      */
     private function compileArrayKey(Compiler $compiler, string $var): void
     {
@@ -195,7 +199,7 @@ class GetAttrExpression extends AbstractExpression implements SupportDefinedTest
         $compiler
             ->raw('(('.$key.' = ')
             ->subcompile($attribute)
-            ->raw(') instanceof \Stringable && is_array('.$var.') ? (string) '.$key.' : '.$key.')')
+            ->raw(') instanceof \Stringable && (is_array('.$var.') || '.$var.' instanceof \ArrayObject || '.$var.' instanceof \ArrayIterator) ? (string) '.$key.' : '.$key.')')
         ;
     }
 

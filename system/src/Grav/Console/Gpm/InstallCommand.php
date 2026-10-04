@@ -587,9 +587,19 @@ class InstallCommand extends GpmCommand
         }
 
         $version = $package->available ?? $package->version;
-        $license = Licenses::get($package->slug);
+        $license = Licenses::forPackage($package);
 
         $io->writeln("Preparing to install <cyan>{$package->name}</cyan> [v{$version}]");
+
+        $destination = $this->destination . DS . $package->install_path;
+        // Preserve the existing explicit symlink-replacement prompt below.
+        if (!is_link($destination)) {
+            $issue = Installer::getDestinationIssue($destination, $package->package_type === 'themes');
+            if ($issue !== null) {
+                $io->error($issue);
+                return false;
+            }
+        }
 
         $io->write('  |- Downloading package...     0%');
         $this->file = $this->downloadPackage($package, $license);
@@ -658,6 +668,10 @@ class InstallCommand extends GpmCommand
         } catch (Exception $e) {
             if (!empty($package->premium) && $e->getCode() === 401) {
                 $message = '<yellow>Unauthorized Premium License Key</yellow>';
+                $reason = Licenses::refusalReason($e);
+                if ($reason !== null) {
+                    $message .= "\n" . $reason;
+                }
             } else {
                 $message = $e->getMessage();
             }
@@ -715,6 +729,12 @@ class InstallCommand extends GpmCommand
             }
 
             unlink($this->destination . DS . $package->install_path);
+        }
+
+        $issue = Installer::getDestinationIssue($this->destination . DS . $package->install_path, $package->package_type === 'themes');
+        if ($issue !== null) {
+            $io->error($issue);
+            return false;
         }
 
         $io->write("\x0D");

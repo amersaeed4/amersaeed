@@ -21,6 +21,8 @@ use RocketTheme\Toolbox\Event\Event;
 
 class GpmController extends AbstractApiController
 {
+    use TranslatesAdminLabels;
+
     /**
      * Package management: browsing the repository, listing installed packages,
      * checking updates. NOT the routes that serve an installed plugin's own
@@ -40,10 +42,15 @@ class GpmController extends AbstractApiController
     public function __construct(\Grav\Common\Grav $grav, \Grav\Common\Config\Config $config)
     {
         parent::__construct($grav, $config);
-        $this->serializer = new PackageSerializer();
-        $cacheDir = $grav['locator']->findResource('cache://', true, true) . '/api/thumbnails';
-        $this->thumbSmall = new ThumbnailService($cacheDir, 500);
-        $this->thumbLarge = new ThumbnailService($cacheDir, 2000);
+        // A package's own blueprints.yaml may write its name/description as a
+        // translation key, the way every other label in that file is written.
+        // Resolve those server-side; anything that isn't a key we can translate
+        // is served exactly as the author wrote it (#39).
+        $this->serializer = new PackageSerializer(
+            fn (string $value): ?string => $this->resolveTranslationKey($value),
+        );
+        $this->thumbSmall = ThumbnailService::forGrav($grav, 500);
+        $this->thumbLarge = ThumbnailService::forGrav($grav, 2000);
     }
 
     /**
@@ -52,6 +59,10 @@ class GpmController extends AbstractApiController
     public function plugins(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $gpm = $this->getGpm();
         $installed = $gpm->getInstalledPlugins();
@@ -86,6 +97,10 @@ class GpmController extends AbstractApiController
     {
         $this->requirePermission($request, self::PERMISSION_READ);
 
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
+
         $slug = $this->getRouteParam($request, 'slug');
         $gpm = $this->getGpm();
 
@@ -113,7 +128,7 @@ class GpmController extends AbstractApiController
         // Where this plugin keeps its settings — see plugins() above.
         $data += $this->pluginSettingsTarget($slug, $request);
 
-        return $this->respondWithEtag($data);
+        return $this->respondWithConditionalEtag($request, $data);
     }
 
     /**
@@ -122,6 +137,10 @@ class GpmController extends AbstractApiController
     public function themes(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $gpm = $this->getGpm();
         $installed = $gpm->getInstalledThemes();
@@ -152,6 +171,10 @@ class GpmController extends AbstractApiController
     {
         $this->requirePermission($request, self::PERMISSION_READ);
 
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
+
         $slug = $this->getRouteParam($request, 'slug');
         $gpm = $this->getGpm();
 
@@ -180,7 +203,7 @@ class GpmController extends AbstractApiController
             $data['custom_fields'] = $customFields;
         }
 
-        return $this->respondWithEtag($data);
+        return $this->respondWithConditionalEtag($request, $data);
     }
 
     /**
@@ -189,6 +212,10 @@ class GpmController extends AbstractApiController
     public function updates(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $query = $request->getQueryParams();
         $flush = filter_var($query['flush'] ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -250,20 +277,54 @@ class GpmController extends AbstractApiController
             throw new ValidationException(ucfirst($type) . " '{$package}' is already installed. Use the update endpoint to update it.");
         }
 
-        // Handle premium license — store if provided, check if needed
         $license = $body['license'] ?? null;
-        if ($license) {
-            if (!Licenses::validate($license)) {
-                throw new ValidationException(
-                    "Invalid license format. Expected: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (uppercase hex)."
-                );
-            }
-            Licenses::set($package, $license);
+        if ($license && !Licenses::validate($license)) {
+            throw new ValidationException(
+                "That does not look like a licence key. Paste the key exactly as the store sent it."
+            );
         }
 
-        // Check if premium package has a license available
         $repoPackage = $gpm->findPackage($package, true);
-        if ($repoPackage && !empty($repoPackage->premium) && !Licenses::get($package)) {
+
+        // A licence is only filed once the slug names a real package, and it
+        // is taken back out if the install then fails: otherwise a typo or a
+        // refused download leaves a key in licenses.yaml under a slug nothing
+        // uses. It has to be on file before the download, though — the
+        // installer reads it from there (Licenses::forPackage) to fetch a
+        // premium zip.
+        $licenseSlug = null;
+        $previousLicense = '';
+        if ($license && $repoPackage) {
+            $licenseSlug = (string) ($repoPackage->slug ?? $package);
+            $previousLicense = $this->readLicense($licenseSlug);
+            $this->storeLicense($licenseSlug, $license);
+        }
+
+        $installed = false;
+        try {
+            $response = $this->runInstall($gpm, $repoPackage, $package, $type);
+            $installed = true;
+
+            return $response;
+        } finally {
+            if (!$installed && $licenseSlug !== null) {
+                $this->storeLicense($licenseSlug, $previousLicense !== '' ? $previousLicense : null);
+            }
+        }
+    }
+
+    /**
+     * The install itself, once the request is validated and any licence the
+     * caller sent is on file. Split out of install() so a failure anywhere in
+     * here can put licenses.yaml back the way it was.
+     */
+    private function runInstall(GPM $gpm, ?object $repoPackage, mixed $package, string $type): ResponseInterface
+    {
+        // Check if premium package has a license available. A package sold
+        // inside a wider licence is covered by the key filed under that
+        // licence's product, so the gate asks the same question the download
+        // proxy does rather than insisting on a key filed under this slug.
+        if ($repoPackage && !empty($repoPackage->premium) && !Licenses::forPackage($repoPackage)) {
             throw new ValidationException(
                 "'{$package}' is a premium package and requires a license. Pass a 'license' field in the request body, or upload a license via the license-manager plugin/API."
             );
@@ -293,7 +354,7 @@ class GpmController extends AbstractApiController
         $installedDeps = [];
         foreach ($depsToInstall as $depSlug) {
             try {
-                $depResult = GpmService::install($depSlug, ['theme' => false]);
+                $depResult = $this->installPackage($depSlug, ['theme' => false]);
             } catch (\Throwable $e) {
                 throw new ApiException(
                     500,
@@ -324,7 +385,7 @@ class GpmController extends AbstractApiController
         }
 
         try {
-            $result = GpmService::install($package, [
+            $result = $this->installPackage($package, [
                 'theme' => $type === 'theme',
                 'install_deps' => false,
             ]);
@@ -405,9 +466,9 @@ class GpmController extends AbstractApiController
         ]);
 
         try {
-            $result = GpmService::uninstall($package, []);
+            $result = $this->uninstallPackage($package, []);
         } catch (\Throwable $e) {
-            throw new ApiException(500, 'Removal Failed', $e->getMessage());
+            throw new ApiException(500, 'Removal Failed', $this->stripGpmColorTags($e->getMessage()));
         }
 
         if ($result !== true) {
@@ -440,12 +501,20 @@ class GpmController extends AbstractApiController
         $package = $body['package'];
 
         $gpm = $this->getGpm();
-        if (!$gpm->isUpdatable($package)) {
-            throw new ValidationException("Package '{$package}' is not updatable or not installed.");
-        }
 
+        // Not installed at all is a missing resource (404); installed but
+        // already current is a request we can't act on (422). Deciding the
+        // type only after that check means `type` always names what is
+        // actually on disk.
         $isTheme = $gpm->isThemeInstalled($package);
+        if (!$isTheme && !$gpm->isPluginInstalled($package)) {
+            throw new NotFoundException("Package '{$package}' is not installed.");
+        }
         $type = $isTheme ? 'theme' : 'plugin';
+
+        if (!$gpm->isUpdatable($package)) {
+            throw new ValidationException(ucfirst($type) . " '{$package}' is already up to date.");
+        }
 
         $this->fireEvent('onApiBeforePackageUpdate', [
             'package' => $package,
@@ -470,7 +539,7 @@ class GpmController extends AbstractApiController
         $installedDeps = [];
         foreach ($depsToInstall as $depSlug) {
             try {
-                $depResult = GpmService::install($depSlug, ['theme' => false]);
+                $depResult = $this->installPackage($depSlug, ['theme' => false]);
             } catch (\Throwable $e) {
                 throw new ApiException(
                     500,
@@ -500,7 +569,7 @@ class GpmController extends AbstractApiController
         }
 
         try {
-            $result = GpmService::update($package, [
+            $result = $this->updatePackage($package, [
                 'theme' => $isTheme,
                 'install_deps' => false,
             ]);
@@ -772,7 +841,15 @@ class GpmController extends AbstractApiController
 
         // Support URL-based install
         if (isset($body['url'])) {
+            // Only a web address. GpmService::directInstall() treats anything
+            // that isn't a remote URL as a path on this server and copies it,
+            // so without this check any ZIP the web server can read (a backup
+            // under backup://, another site's upload) could be installed as a
+            // package. A ZIP from the caller's own machine comes in as `file`.
             $packageFile = $body['url'];
+            if (!is_string($packageFile) || !$this->isWebUrl($packageFile)) {
+                throw new ValidationException('The "url" field must be an http:// or https:// address. Upload a ZIP from your computer as "file" instead.');
+            }
         } else {
             // Check for uploaded file
             $uploadedFiles = $request->getUploadedFiles();
@@ -823,6 +900,10 @@ class GpmController extends AbstractApiController
     {
         $this->requirePermission($request, self::PERMISSION_READ);
 
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
+
         $pagination = $this->getPagination($request);
         // Allow fetching all repository packages (the install modal needs the full list)
         $query = $request->getQueryParams();
@@ -861,6 +942,7 @@ class GpmController extends AbstractApiController
             page: $pagination['page'],
             perPage: $pagination['per_page'],
             baseUrl: $baseUrl,
+            query: $request->getQueryParams(),
         );
     }
 
@@ -870,6 +952,10 @@ class GpmController extends AbstractApiController
     public function repositoryThemes(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $pagination = $this->getPagination($request);
         $query = $request->getQueryParams();
@@ -908,6 +994,7 @@ class GpmController extends AbstractApiController
             page: $pagination['page'],
             perPage: $pagination['per_page'],
             baseUrl: $baseUrl,
+            query: $request->getQueryParams(),
         );
     }
 
@@ -917,6 +1004,10 @@ class GpmController extends AbstractApiController
     public function repositoryPackage(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $slug = $this->getRouteParam($request, 'slug');
         $gpm = $this->getGpm();
@@ -943,6 +1034,10 @@ class GpmController extends AbstractApiController
     public function search(ServerRequestInterface $request): ResponseInterface
     {
         $this->requirePermission($request, self::PERMISSION_READ);
+
+        // Package name/description may be translation keys; resolve them against
+        // the caller's admin language (#39).
+        $this->primeAdminLanguages($request);
 
         $query = $request->getQueryParams();
         $search = $query['q'] ?? null;
@@ -988,6 +1083,7 @@ class GpmController extends AbstractApiController
             page: $pagination['page'],
             perPage: $pagination['per_page'],
             baseUrl: $baseUrl,
+            query: $request->getQueryParams(),
         );
     }
 
@@ -1032,6 +1128,17 @@ class GpmController extends AbstractApiController
     }
 
     /**
+     * Remove a package via GpmService. See installPackage() for rationale.
+     *
+     * @param array<string, mixed> $options
+     * @return string|bool
+     */
+    protected function uninstallPackage(string $slug, array $options)
+    {
+        return GpmService::uninstall($slug, $options);
+    }
+
+    /**
      * Strip Grav CLI color markup (e.g. <red>..</red>, <cyan>..</cyan>) from
      * exception messages so they read cleanly in API responses.
      */
@@ -1042,6 +1149,68 @@ class GpmController extends AbstractApiController
             '',
             $message
         ) ?? $message;
+    }
+
+    /**
+     * Is this an absolute http(s) URL with a host?
+     */
+    private function isWebUrl(string $url): bool
+    {
+        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+            return false;
+        }
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https'], true)
+            && (string) parse_url($url, PHP_URL_HOST) !== '';
+    }
+
+    /**
+     * The licence key filed under a slug, or '' when there is none. Wrapped,
+     * like installPackage(), so a test can stand in for licenses.yaml.
+     */
+    protected function readLicense(string $slug): string
+    {
+        $license = Licenses::get($slug);
+
+        return is_string($license) ? $license : '';
+    }
+
+    /**
+     * File a licence key under a slug, or remove the slug's key when $license
+     * is null.
+     */
+    protected function storeLicense(string $slug, ?string $license): void
+    {
+        Licenses::set($slug, $license);
+    }
+
+    /**
+     * Refuse (404) a request for an admin-next script of a plugin that is not
+     * enabled. A disabled plugin's code is not meant to run anywhere,
+     * admin included, and nothing in Admin Next asks for a disabled plugin's
+     * page, widget, panel, modal or report: those are only offered through
+     * events a disabled plugin never answers.
+     */
+    private function requireEnabledPlugin(string $slug): void
+    {
+        if (!$this->config->get("plugins.{$slug}.enabled", false)) {
+            throw new NotFoundException("Plugin '{$slug}' is not enabled.");
+        }
+    }
+
+    /**
+     * Answer a GET with its ETag, or with an empty 304 when the caller already
+     * holds that version (If-None-Match).
+     */
+    private function respondWithConditionalEtag(ServerRequestInterface $request, mixed $data): ResponseInterface
+    {
+        $etag = $this->generateEtag($data);
+        if ($this->etagMatches($request->getHeaderLine('If-None-Match'), '"' . $etag . '"')) {
+            return new \Grav\Framework\Psr7\Response(304, ['ETag' => '"' . $etag . '"'], '');
+        }
+
+        return $this->respondWithEtag($data, etag: $etag);
     }
 
     /**
@@ -1075,7 +1244,7 @@ class GpmController extends AbstractApiController
 
         // Thumbnail (small, capped at 500px for list views)
         foreach (['thumbnail.jpg', 'thumbnail.png'] as $file) {
-            $filename = $this->thumbSmall->ensureThumbnail($path . '/' . $file);
+            $filename = $this->thumbSmall->thumbnailFilename($path . '/' . $file);
             if ($filename) {
                 $result['thumbnail'] = $this->getApiBaseUrl() . '/thumbnails/' . $filename;
                 break;
@@ -1084,7 +1253,7 @@ class GpmController extends AbstractApiController
 
         // Screenshot (large, capped at 2000px for detail/preview)
         foreach (['screenshot.jpg', 'screenshot.png'] as $file) {
-            $filename = $this->thumbLarge->ensureThumbnail($path . '/' . $file);
+            $filename = $this->thumbLarge->thumbnailFilename($path . '/' . $file);
             if ($filename) {
                 $result['screenshot'] = $this->getApiBaseUrl() . '/thumbnails/' . $filename;
                 break;
@@ -1175,6 +1344,10 @@ class GpmController extends AbstractApiController
     /**
      * GET /gpm/plugins/{slug}/changelog - Get plugin CHANGELOG.md content.
      * GET /gpm/themes/{slug}/changelog
+     *
+     * With `?available=true` this returns what an update would bring instead:
+     * the GPM feed's entries newer than the installed version, as one markdown
+     * document (see gravChangelog() for the core equivalent).
      */
     public function changelog(ServerRequestInterface $request): ResponseInterface
     {
@@ -1184,6 +1357,12 @@ class GpmController extends AbstractApiController
         $type = str_contains($request->getUri()->getPath(), '/themes/') ? 'themes' : 'plugins';
 
         $path = $this->resolvePackagePath($slug, $type);
+
+        $query = $request->getQueryParams();
+        if (filter_var($query['available'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return $this->availableChangelog($slug, $type);
+        }
+
         $file = $path . '/CHANGELOG.md';
 
         if (!file_exists($file)) {
@@ -1211,7 +1390,52 @@ class GpmController extends AbstractApiController
         // Only show entries newer than the installed version.
         $changelog = $gravInfo ? (array) $gravInfo->getChangelog(GRAV_VERSION) : [];
 
-        // Each entry is either a markdown string or ['date' => ..., 'content' => markdown].
+        return ApiResponse::create([
+            'content' => $this->assembleChangelog($changelog),
+        ]);
+    }
+
+    /**
+     * What an update to an installed plugin/theme would change: the feed's
+     * changelog entries newer than the installed version, as one markdown doc.
+     */
+    private function availableChangelog(string $slug, string $type): ResponseInterface
+    {
+        $gpm = $this->getGpm();
+
+        $installed = $type === 'themes' ? $gpm->getInstalledTheme($slug) : $gpm->getInstalledPlugin($slug);
+        if (!$installed) {
+            throw new NotFoundException("Package '{$slug}' is not installed.");
+        }
+
+        $remote = $type === 'themes' ? $gpm->getRepositoryTheme($slug) : $gpm->getRepositoryPlugin($slug);
+        $installedVersion = (string) ($installed->version ?? '');
+
+        $changelog = [];
+        if ($remote && $installedVersion !== '' && !empty($remote->changelog)) {
+            $changelog = (array) $remote->getChangelog($installedVersion);
+        }
+
+        $content = $this->assembleChangelog($changelog);
+        if ($content === '') {
+            throw new NotFoundException("No newer changelog entries found for '{$slug}'.");
+        }
+
+        return ApiResponse::create([
+            'content' => $content,
+        ]);
+    }
+
+    /**
+     * Assemble feed changelog entries (version => entry) into one markdown doc,
+     * one `# v{version} ({date})` section per version.
+     *
+     * Each entry is either a markdown string or ['date' => ..., 'content' => markdown].
+     *
+     * @param array<string, mixed> $changelog
+     */
+    private function assembleChangelog(array $changelog): string
+    {
         $parts = [];
         foreach ($changelog as $version => $entry) {
             $date = is_array($entry) ? ($entry['date'] ?? '') : '';
@@ -1225,9 +1449,7 @@ class GpmController extends AbstractApiController
             $parts[] = "{$heading}\n\n{$body}";
         }
 
-        return ApiResponse::create([
-            'content' => implode("\n\n", $parts),
-        ]);
+        return implode("\n\n", $parts);
     }
 
     /**
@@ -1247,7 +1469,14 @@ class GpmController extends AbstractApiController
         }
 
         $base = $type === 'themes' ? 'themes' : 'plugins';
-        $path = $this->grav['locator']->findResource("user://{$base}/{$slug}", true);
+        $locator = $this->grav['locator'];
+        $path = $locator->findResource("{$base}://{$slug}", true);
+
+        // Honor configured package stream precedence (including multisite
+        // overlays). Retain the legacy user path when no package resolves.
+        if (!$path || !is_dir($path)) {
+            $path = $locator->findResource("user://{$base}/{$slug}", true);
+        }
 
         if (!$path || !is_dir($path)) {
             throw new NotFoundException("Package '{$slug}' not found.");
@@ -1263,7 +1492,9 @@ class GpmController extends AbstractApiController
      * Each JS file should define a Custom Element that admin-next will load
      * on demand when encountering an unknown field type.
      *
-     * @return array<string, string>|null Map of field type → relative script path, or null if none
+     * @return array<string, string>|null Map of field type → field type (admin-next only reads the
+     *                                    keys; the script comes from /gpm/{kind}/{slug}/field/{type}),
+     *                                    or null if none
      */
     private function discoverCustomFields(string $slug, string $type): ?array
     {
@@ -1295,12 +1526,27 @@ class GpmController extends AbstractApiController
     /**
      * GET /custom-fields — Return all custom field registrations from all enabled plugins and themes.
      *
-     * Returns a map of field type → plugin/theme slug so admin-next can
+     * Returns a map of field type → { slug, kind } so admin-next can
      * pre-populate the custom field registry at startup.
+     *
+     * Gated on `api.access`, like the field scripts it points to: admin-next
+     * loads it at boot for every account, and an editor whose page blueprint
+     * uses a plugin's field type needs this map to know the field exists,
+     * whether or not they can manage packages.
      */
     public function allCustomFields(ServerRequestInterface $request): ResponseInterface
     {
-        $this->requirePermission($request, self::PERMISSION_READ);
+        return ApiResponse::create($this->allCustomFieldsData($request));
+    }
+
+    /**
+     * The payload of GET /custom-fields, shared with GET /admin-next/boot.
+     *
+     * @return array<string, array{slug: string, kind: string}>
+     */
+    public function allCustomFieldsData(ServerRequestInterface $request): array
+    {
+        $this->requirePermission($request, 'api.access');
 
         $gpm = $this->getGpm();
         $allFields = [];
@@ -1330,7 +1576,7 @@ class GpmController extends AbstractApiController
             }
         }
 
-        return ApiResponse::create($allFields);
+        return $allFields;
     }
 
     /**
@@ -1348,6 +1594,9 @@ class GpmController extends AbstractApiController
         $fieldType = $this->getRouteParam($request, 'type');
         $pkgType = str_contains($request->getUri()->getPath(), '/themes/') ? 'themes' : 'plugins';
 
+        // Unlike the page/widget/panel/modal/report scripts, field scripts are
+        // served for a disabled plugin too: its settings form is edited before
+        // it is enabled, and that form can use the plugin's own field types.
         $path = $this->resolvePackagePath($slug, $pkgType);
         $file = $path . '/admin-next/fields/' . basename($fieldType) . '.js';
 
@@ -1372,6 +1621,7 @@ class GpmController extends AbstractApiController
         $slug = $this->getRouteParam($request, 'slug');
         $pkgType = str_contains($request->getUri()->getPath(), '/themes/') ? 'themes' : 'plugins';
 
+        // Served for disabled plugins too; see customFieldScript().
         $path = $this->resolvePackagePath($slug, $pkgType);
         $dir = $path . '/admin-next/fields';
 
@@ -1552,6 +1802,7 @@ class GpmController extends AbstractApiController
 
         $slug = $this->getRouteParam($request, 'slug');
         $path = $this->resolvePackagePath($slug, 'plugins');
+        $this->requireEnabledPlugin($slug);
         $file = $path . '/admin-next/pages/' . basename($slug) . '.js';
 
         return $this->serveComponentScript($request, $file, "Page component not found for plugin '{$slug}'.");
@@ -1568,6 +1819,7 @@ class GpmController extends AbstractApiController
 
         $slug = $this->getRouteParam($request, 'slug');
         $path = $this->resolvePackagePath($slug, 'plugins');
+        $this->requireEnabledPlugin($slug);
         $file = $path . '/admin-next/widgets/' . basename($slug) . '.js';
 
         return $this->serveComponentScript($request, $file, "Widget component not found for plugin '{$slug}'.");
@@ -1584,6 +1836,7 @@ class GpmController extends AbstractApiController
 
         $slug = $this->getRouteParam($request, 'slug');
         $path = $this->resolvePackagePath($slug, 'plugins');
+        $this->requireEnabledPlugin($slug);
         $file = $path . '/admin-next/panels/' . basename($slug) . '.js';
 
         return $this->serveComponentScript($request, $file, "Panel component not found for plugin '{$slug}'.");
@@ -1602,6 +1855,7 @@ class GpmController extends AbstractApiController
         $slug = $this->getRouteParam($request, 'slug');
         $modalId = $this->getRouteParam($request, 'modalId');
         $path = $this->resolvePackagePath($slug, 'plugins');
+        $this->requireEnabledPlugin($slug);
         $file = $path . '/admin-next/modals/' . basename($modalId) . '.js';
 
         return $this->serveComponentScript($request, $file, "Modal component '{$modalId}' not found for plugin '{$slug}'.");
@@ -1619,6 +1873,7 @@ class GpmController extends AbstractApiController
         $slug = $this->getRouteParam($request, 'slug');
         $reportId = $this->getRouteParam($request, 'reportId');
         $path = $this->resolvePackagePath($slug, 'plugins');
+        $this->requireEnabledPlugin($slug);
         $file = $path . '/admin-next/reports/' . basename($reportId) . '.js';
 
         return $this->serveComponentScript($request, $file, "Report component '{$reportId}' not found for plugin '{$slug}'.");
@@ -1655,8 +1910,7 @@ class GpmController extends AbstractApiController
         $headers = [
             'Content-Type' => 'application/javascript; charset=utf-8',
             // Store but always revalidate: an unchanged script costs only a 304,
-            // a changed one is served fresh. These routes are also excluded from
-            // the rate limiter (see RateLimitMiddleware).
+            // a changed one is served fresh.
             'Cache-Control' => 'private, no-cache',
             'ETag' => $etag,
         ];

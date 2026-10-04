@@ -3,7 +3,7 @@
  * ----------------------------------------------------
  * Principles (per DESIGN.md):
  *  - Monochrome palette; color is foreign.
- *  - Nunito for both display and body.
+ *  - Cal Sans for display, Inter for body.
  *  - Shadow-first depth: ring + soft + contact.
  *  - Generous whitespace; 80-96px between sections.
  */
@@ -53,9 +53,9 @@
 
   /* Pico overrides */
   --pico-font-family-sans-serif:
-    "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --pico-font-family-display:
-    "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    "Cal Sans", "Inter", sans-serif;
 
   /* Forum Pro headings. Without this the forum falls back to the body font for
    * its own headings while the unclassed ones under them keep Cal Sans, so a
@@ -216,12 +216,10 @@ h6,
   margin-bottom: 0.4em;
 }
 
-/* h1 — airy, display scale. Cal Sans read as bold even at weight 400 by
- * design; Nunito is a normal-weight sans, so it needs an actual heavy
- * weight here to carry the same display presence. */
+/* h1 — airy, display scale, lighter weight */
 h1 {
   font-size: clamp(2.25rem, 5vw + 1rem, 3.75rem);
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1.05;
   letter-spacing: -0.025em;
 }
@@ -1209,17 +1207,15 @@ body.overlay-open {
   color: color-mix(in oklab, #242424 72%, transparent);
 }
 
-/* Close h1/h2 title pairing. Weight tuned for Nunito (a normal-weight
- * variable sans) rather than Cal Sans, which read elegantly thin even at
- * very low weights by design. */
+/* Close h1/h2 title pairing */
 .title-h1h2 h1 {
-  font-weight: 300;
+  font-weight: 100;
   margin-bottom: 0;
   line-height: 1.1;
 }
 .title-h1h2 h1 strong,
 .title-h1h2 h1 b {
-  font-weight: 700;
+  font-weight: 400;
 }
 .title-h1h2 h1 + h2 {
   margin-top: 0;

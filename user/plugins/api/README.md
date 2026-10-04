@@ -54,7 +54,7 @@ curl https://yoursite.com/api/v1/pages \
 
 ## Environments
 
-Grav supports multiple environments (e.g., `localhost`, `staging.mysite.com`, `mysite.com`) with per-environment config overrides stored in `user/env/{environment}/config/`. The API respects this system via the optional `X-Grav-Environment` header.
+Grav supports multiple environments (e.g., `localhost`, `staging.mysite.com`, `mysite.com`) with per-environment config overrides. The default location is `user/env/{environment}/config/`, but Grav can replace it with `GRAV_ENVIRONMENTS_PATH`, `GRAV_ENVIRONMENT_PATH`, or a custom `environment://` stream. The API follows Grav's resolved stream instead of reconstructing the default path. The optional `X-Grav-Environment` header selects the environment Grav loads for the request.
 
 ```bash
 # Explicitly target an environment
@@ -69,7 +69,7 @@ If the header is omitted, the API defaults to Grav's auto-detected environment (
 curl -H "X-API-Key: ..." https://yoursite.com/api/v1/system/environments
 ```
 
-Returns the current environment and all environment-specific overrides found in `user/env/`:
+Returns the current environment and all existing environment-specific overrides discovered through Grav's configured environment paths:
 
 ```json
 {
@@ -158,6 +158,8 @@ curl -X POST https://yoursite.com/api/v1/auth/revoke \
 ### Session Passthrough (for admin panel integration)
 
 If a user has an active Grav admin session, the API recognizes it automatically. This enables the current admin UI (or a future SPA admin) to call the API from the browser without separate authentication — no API key or JWT needed.
+
+**Writes on a session must come from your own site.** A `POST`, `PUT`, `PATCH` or `DELETE` signed in by the session cookie alone is refused with a `403` unless its `Origin` (or `Referer`) names this host or an origin listed in `cors.origins`. A request with neither header has to carry a JSON content type or a custom header such as `X-Requested-With`, which a form on another site cannot send. Same-origin `fetch` calls pass as they are. API keys and JWTs are never asked, and on a public route a forged write is simply treated as a guest.
 
 ### Which method should I use?
 
@@ -314,10 +316,10 @@ curl -X PATCH https://yoursite.com/api/v1/config/plugins/markdown \
 
 **Differential saves.** Config writes persist only the delta against the relevant parent yaml — `system / site / media / security / scheduler / backups` diff against `system/config/<scope>.yaml` (Grav core defaults), `plugins/<name>` diffs against `user/plugins/<name>/<name>.yaml`, and `themes/<name>` diffs against `user/themes/<name>/<name>.yaml`. Defaults come from the raw yaml on disk (not from blueprints, which describe the form and routinely diverge from runtime). Sequential arrays like `languages.supported` are treated atomically — any difference retains the whole new list, avoiding the classic admin-classic bug where shortening a list silently re-merged removed entries.
 
-**Targeting an environment for writes.** The optional `X-Config-Environment` header points writes at an existing env folder under `user/env/<name>/config/`; an empty/missing value writes to base `user/config/`. Env folders are **never** created implicitly — clients must opt in via `POST /system/environments`. A non-empty header that doesn't match an existing folder returns a clear `400`.
+**Targeting an environment for writes.** The optional `X-Config-Environment` header points writes at an existing environment resolved by Grav. For the environment currently loaded by Grav, this is the official `environment://config` stream and therefore also honors `GRAV_ENVIRONMENT_PATH` and `setup.php` stream overrides. For another named environment, Grav's configured common `GRAV_ENVIRONMENTS_PATH` is used when present; the standard `user/env/<name>/config/` and legacy `user/<name>/config/` layouts remain supported. An empty/missing value writes to base `user/config/`. Environment folders are **never** created implicitly — clients must opt in via `POST /system/environments`. A non-empty header that doesn't match an existing configured folder returns a clear `400`.
 
 ```bash
-# Write only to the staging environment overrides
+# Write only to the existing staging environment overrides
 curl -X PATCH https://yoursite.com/api/v1/config/system \
   -H "X-API-Key: ..." \
   -H "X-Config-Environment: staging.example.com" \
@@ -325,7 +327,7 @@ curl -X PATCH https://yoursite.com/api/v1/config/system \
   -d '{"languages": {"default_lang": "fr"}}'
 ```
 
-> `X-Config-Environment` is a **write-target** header (which env folder receives the change). It is distinct from `X-Grav-Environment` (which env to *load* for the request).
+> `X-Config-Environment` is a **write-target** header (which existing environment receives the change). It is distinct from `X-Grav-Environment` (which environment Grav loads for the request). Grav's `environment://` stream is authoritative for the loaded environment; the API never derives an unrelated target from the request host and never creates a target during `PATCH` or `revert`.
 
 **Override metadata.** Every `GET`/`PATCH` config response carries a `meta` block describing which leaf keys the active layer's file actually overrides, and the value each would revert to:
 
@@ -359,7 +361,7 @@ curl -X POST https://yoursite.com/api/v1/config/system/revert \
   -d '{"reset": true}'
 ```
 
-A `{"keys": [...]}` payload drops just those paths; `{"reset": true}` removes the active layer's file outright. The response is the same shape as a read, reflecting the post-revert state.
+A `{"keys": [...]}` payload drops just those paths; `{"reset": true}` removes the active layer's file outright. The response has the same structure as a read, reflecting the post-revert state, plus `meta.reverted` saying whether anything changed.
 
 #### Custom config scopes
 
@@ -390,8 +392,8 @@ A scope qualifies as custom when it is a flat slug (`^[a-z0-9][a-z0-9_-]*$` — 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/ping` | Keep-alive / health check |
-| `GET` | `/system/environments` | List available environments (current host + `user/env/*` + legacy 1.6 layouts) |
-| `POST` | `/system/environments` | Create a new env folder under `user/env/<name>/config/` |
+| `GET` | `/system/environments` | List available environments (current Grav environment stream + configured common path + legacy 1.6 layouts) |
+| `POST` | `/system/environments` | Create a new environment config folder at Grav's configured environment path |
 | `GET` | `/system/info` | System information |
 | `DELETE` | `/cache` | Clear cache |
 | `GET` | `/system/logs` | Read logs |
@@ -482,7 +484,7 @@ Searches match against slug, name, description, author, and keywords. All reposi
 
 **Customizable dashboard.** `GET /dashboard/widgets` returns a merged widget list combining (1) a built-in core registry, (2) plugin contributions via the `onApiDashboardWidgets` event, (3) the site-default layout, and (4) the current user's overrides. Site-hidden widgets are dropped entirely from a user's view (cannot be re-enabled per-user); the user's overrides win for size/order on the rest. Each resolved widget carries its allowed `sizes[]`, `defaultSize`, icon, and authorize permission so the client can render the customize-mode picker without a second round-trip.
 
-**Notifications schema (v2).** Each notification has structured fields — `type` (`info` | `notice` | `warning` | `promo`), `icon`, `title`, `message` (markdown), `link`, `image` + `accent` (for `promo` cards), `action: {label, url}`, and `dependencies` — so clients can render natively rather than receive embedded HTML. The endpoint fetches from `https://getgrav.org/notifications2.json` and caches per-user under `user/data/notifications/{md5}_v2.yaml`.
+**Notifications schema (v2).** Each notification has structured fields — `type` (`info` | `notice` | `warning` | `promo`), `icon`, `title`, `message` (markdown), `link`, `image` + `image_height` (20 to 48 px, default 28) + `accent` + `layout` (for `promo` cards; `layout` is `full`, `half` or `joined`, and consecutive `half` or `joined` promos share a row that stacks when the widget is narrow; a promo under the `dashboard-row` location is read after `dashboard` by Admin 2.1.17+ and ignored by older admins, so a second half can be added without stacking two banners on old sites), `action: {label, url}`, and `dependencies` — so clients can render natively rather than receive embedded HTML. The endpoint fetches from `https://getgrav.org/notifications2.json` and caches per-user under `user/data/notifications/{md5}_v2.yaml`.
 
 **Plugin-contributed widgets** — listen for `onApiDashboardWidgets` and append to `$event['widgets']`. Each entry can declare an `authorize` permission so the resolver hides widgets the user lacks access to.
 
@@ -707,6 +709,19 @@ curl -s "https://yoursite.com/api/v1/blueprints/plugins/email" \
 
 Streams resolve through Grav's locator so symlinked theme/plugin folders (common in dev setups) work cleanly — the response returns a *logical* user-rooted path (`user/themes/quark2/images/logo/foo.png`) independent of realpath, so a subsequent `DELETE /blueprint-upload` round-trips through the symlink to remove the actual file. `..` traversal and absolute paths are rejected, filenames are sanitized, and the dangerous-extension allowlist is checked. `DELETE` is idempotent — a missing file returns `204 No Content`.
 
+Page content (`md`, `markdown`) and stylesheets (`css`, `scss`, `sass`, `less`) are refused by default, on upload and delete. A developer can allow them for one field by listing them in that field's blueprint:
+
+```yaml
+custom_css:
+  type: file
+  label: Custom stylesheet
+  destination: 'self@:css'
+  accept: ['.css']
+  allow_extensions: [css]
+```
+
+The client sends the field's name as `field` alongside `scope`, and the server looks the field up in the blueprint that owns the scope (the plugin or theme config blueprint, the page template's blueprint, or the account blueprint). The request can't grant the permission itself: the field must exist, be `type: file`, declare `allow_extensions`, and the upload must go to that field's own `destination`. `allow_extensions` only lifts those six extensions; dangerous and config-type extensions (`php`, `yaml`, `json`, `twig` and the rest), the image-only rule for `user/accounts/` and the config directory block always apply.
+
 ## Response Format
 
 ### Success
@@ -788,10 +803,11 @@ rate_limit:
   requests: 120
   window: 60
   excluded_paths:
-    - /sync/   # default — exempt collab endpoints from the per-user bucket
+    - /sync/         # default — exempt collab endpoints from the per-user bucket
+    - /thumbnails/   # default — exempt media thumbnail images
 ```
 
-`excluded_paths` exempts matching path prefixes from the bucket entirely — useful for high-frequency authenticated traffic (e.g. the sync plugin's polling, which fires ~90 req/min per active editor and would otherwise trip the global anti-abuse limit). Auth and per-route permissions still apply, so the bypass is gated by normal authentication rather than being a free pass.
+`excluded_paths` exempts matching path prefixes (matched from the start of the route path) from the bucket entirely. There are two defaults. `/sync/`: an editor in a shared editing session polls it about 90 times a minute, which would use up the limit on its own. `/thumbnails/`: every tile in a media folder is its own image request, so scrolling a large folder would run the budget dry and leave blank tiles; that route only serves thumbnails an authenticated listing already generated, and it is cached for a year. Nothing else is exempt, including the plugin scripts Admin2 loads. Auth and per-route permissions still apply, so the bypass is gated by normal authentication rather than being a free pass.
 
 ## CORS
 
@@ -1088,7 +1104,7 @@ The fields:
 
 | Key | Required | Meaning |
 |---|---|---|
-| `version` | yes | Manifest format version. Only `1` exists. A manifest without it, or with any other value, is skipped whole. |
+| `version` | yes | Manifest format version. `1` or `2`. Version 2 adds `body`. A manifest without it, or with any other value, is skipped whole. |
 | `prefix` | no | Tool-name prefix. Defaults to the plugin slug with `-` replaced by `_`. |
 | `tools[].name` | yes | Must match `^[a-z][a-z0-9_]*$`. The final tool name is `{prefix}_{name}` and must be 64 characters or fewer. |
 | `tools[].title` | no | Human title an MCP client may show. |
@@ -1099,8 +1115,32 @@ The fields:
 | `tools[].annotations` | no | `readOnly`, `destructive` and `idempotent` booleans. Defaults follow the method: `GET` is `readOnly: true, idempotent: true`; `DELETE` is `destructive: true, idempotent: true`; `PUT` and `PATCH` are `idempotent: true`; `POST` is all false. Setting a key overrides the default for that key only. |
 | `tools[].input` | no | A JSON Schema object (`type: object`) in the subset below. Omit it for a tool that takes no arguments. |
 | `tools[].query` | no | For `POST`, `PATCH`, `PUT` and `DELETE`, the property names to send as query-string parameters rather than in the JSON body. Ignored for `GET`, which sends every non-path property as a query parameter. |
+| `tools[].body` | no | Version 2 only. Names the single declared property whose value *is* the request body, instead of the body being assembled from whatever properties are left over. For a route whose body fields the site decides — a Flex directory's, say — or whose fields would collide with a path placeholder. The property must be declared, must be `type: object`, and must be neither a path placeholder nor listed in `query`; the method cannot be `GET`; the root `input` must not be open (`additionalProperties: true`); and every other declared property must be a path placeholder or in `query`, since nothing is left over to fall into the body. Whether it is `required` is yours to decide. |
 
-Only JSON bodies are supported. Multipart routes (file, image and release uploads) are out of scope for version 1, so leave them out of the manifest.
+Only JSON bodies are supported. Multipart routes (file, image and release uploads) are out of scope, so leave them out of the manifest.
+
+An `additionalProperties: true` at the root of `input` is honored: arguments the schema does not declare are passed through, as query parameters for a `GET` and into the body for everything else. Use it for a route that forwards whatever it is handed. The root is an object like any other, so the free-form-map rule below reaches it too: an `input` declaring `type: object` with no `properties` is open. For a tool that takes no arguments, omit `input` entirely rather than writing an empty `type: object`. It cannot be combined with `body`, which needs a closed schema so that every property has exactly one place to go. A key on a tool that is not one of the keys above is an error, not something ignored: the tool is dropped with an `unknown key` warning.
+
+A body-designated tool, for a route whose fields come from the site's own blueprints:
+
+```yaml
+version: 2
+prefix: flex
+tools:
+  - name: update_object
+    description: Change one or more fields of an object in a Flex directory.
+    method: PATCH
+    path: /flex-objects/{type}/{key}
+    permission: flex-objects.update
+    body: object
+    input:
+      type: object
+      required: [type, key, object]
+      properties:
+        type:   { type: string, description: "Directory name" }
+        key:    { type: string, description: "Object key" }
+        object: { type: object, additionalProperties: true, description: "Fields per the directory blueprint" }
+```
 
 **The JSON Schema subset.** An MCP client converts `input` into its own validator at load time, so a manifest may only use what that conversion understands. A tool that uses anything else is rejected and the reason is reported under `warnings`.
 
@@ -1147,7 +1187,8 @@ The first argument is your plugin slug, which decides the name prefix and fills 
         "annotations": { "readOnly": true, "destructive": false, "idempotent": true },
         "input_schema": { "type": "object", "properties": { "q": { "type": "string" } } },
         "path_params": [],
-        "query": []
+        "query": [],
+        "body": null
       }
     ],
     "plugins": [
@@ -1166,6 +1207,7 @@ A few rules worth knowing while you write a manifest:
 - Only enabled plugins are read. A plugin with no `mcp.yaml` and no `onApiMcpTools` listener contributes nothing and is not listed under `plugins`.
 - A tool whose `permission` the caller does not hold is left out, and super admins see everything. Tools without a permission are always included. `plugins[].tools` counts what that caller can see, so the number moves with who is asking.
 - `annotations` always comes back fully populated with the defaults applied, and `input_schema` is always present (`{"type":"object","properties":{}}` for a tool that takes no arguments). `path_params` lists the placeholders in `path` in the order they appear.
+- `body` is always present, and is `null` unless the tool designated one. When it names a property, that property's value is the whole request body and every other property is a path or query parameter; when it is `null`, the body is whatever is left after the path and query parameters are taken out.
 - `fingerprint` hashes the enabled-plugin set plus the manifest file modification times, so a client can tell whether anything changed without diffing the tool list. It is also sent as the `ETag`, and a matching `If-None-Match` gets a 304. Tools added through the event have no file behind them, so editing that code does not move the fingerprint.
 - `warnings` names every entry that was skipped and why, and is safe to show to any authenticated caller. Use it while writing a manifest: a typo costs you that one tool, never the rest of the file.
 - A broken manifest never takes the endpoint down. A YAML parse error becomes one warning naming your plugin and every other plugin is served as usual.
@@ -1192,12 +1234,28 @@ The API fires events before and after all write operations, allowing plugins to 
 
 ### Media Events
 
+The same media event names are fired from three different places, and the payload differs depending on what the file is attached to. Read the "Payload by emitter" table below before dereferencing anything.
+
 | Event | When | Event Data |
 |-------|------|------------|
-| `onApiBeforeMediaUpload` | Before each file is saved | `page`, `filename`, `type`, `size` |
-| `onApiMediaUploaded` | After upload completes | `page`, `filenames` (array) |
-| `onApiBeforeMediaDelete` | Before a media file is deleted | `page`, `filename` |
-| `onApiMediaDeleted` | After media deletion | `page`, `filename` |
+| `onApiBeforeMediaUpload` | Before each file is saved | `page`, `filename`, `type`, `size` — plus `path` on site media, or `object` instead of `page` on flex media |
+| `onApiMediaUploaded` | After upload completes | `page`, `filenames` (array) — plus `path` on site media, or `object` instead of `page` on flex media |
+| `onApiBeforeMediaDelete` | Before a media file is deleted | `page`, `filename` — plus `path` on site media, or `object` instead of `page` on flex media |
+| `onApiMediaDeleted` | After media deletion | `page`, `filename` — plus `path` on site media, or `object` instead of `page` on flex media |
+| `onApiMediaMetadataUpdated` | After a `.meta.yaml` sidecar is written | `page`, `filename` on page media; `path`, `filename` on site media (no `page` key at all) |
+| `onApiMediaMetadataDeleted` | After a sidecar's editable fields are cleared | `page`, `filename` on page media; `path`, `filename` on site media (no `page` key at all) |
+
+**Payload by emitter:**
+
+| Emitted by | Routes | Payload |
+|------------|--------|---------|
+| Page media | `/pages/{route}/media…` | `page` is the `PageInterface` the file belongs to. No `path` key. |
+| Site media | `/media…` | `page` is **always `null`** — site media belongs to no page. An extra `path` key is added: on the upload events it is the destination *folder* relative to the media root (`''` for the root itself); on the delete and metadata events it is the *file's* path relative to the media root. The metadata events carry `path` but no `page` key at all. |
+| Flex media | `/flex-objects/{type}/{key}/media…` (provided by the Flex Objects plugin) | There is no `page` key at all; `object` carries the `FlexObjectInterface` instead. No `path` key. Flex fires only the four upload/delete events, not the metadata pair. |
+
+> A listener that does `$event['page']->route()` will fatal on a site-media upload and warn on a flex one. Check the key exists and is not null, and fall back to `path` (site) or `object` (flex).
+
+Site media folder operations (`POST /media/folders`, `POST /media/folders/rename`, `DELETE /media/folders/{path}`) fire no `onApi*` event, because there is no page-media counterpart to keep parity with.
 
 ### Config Events
 
@@ -1401,6 +1459,10 @@ A complete OpenAPI 3.0 specification is included at [`openapi.yaml`](openapi.yam
 - **Swagger UI** for browsable documentation
 - **Any OpenAPI-compatible tool** for client SDK generation
 
+`openapi.yaml` is the source of truth. `OpenApiCoverageTest` fails when a core route is missing from it (or it still lists a removed one), and `npm run lint:openapi` validates it.
+
+For Postman you can also import [`grav-api.postman_collection.json`](grav-api.postman_collection.json) directly. It has a request for every route with `base_url`, `api_key` and `grav_environment` variables already wired. The collection doubles as the Newman test suite: its hand-written requests carry the tests, and `npm run postman:sync` adds a request, generated from the spec, for every route none of them call. Generated requests skip themselves under `npm run test:api`, since many of them change or delete data.
+
 ## Development
 
 ### Running Tests
@@ -1449,6 +1511,7 @@ grav-plugin-api/
 │   │   ├── AuthenticatorInterface.php
 │   │   ├── ApiKeyAuthenticator.php
 │   │   ├── JwtAuthenticator.php
+│   │   ├── SameOriginGuard.php
 │   │   ├── SessionAuthenticator.php
 │   │   └── ApiKeyManager.php
 │   ├── Controllers/

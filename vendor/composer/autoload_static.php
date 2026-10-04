@@ -4,7 +4,7 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
+class ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad
 {
     public static $files = array (
         '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
@@ -28,16 +28,13 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
     );
 
     public static $prefixLengthsPsr4 = array (
-        't' =>
-        array (
-            'tubalmartin\\CssMin\\' => 19,
-        ),
         'd' =>
         array (
             'donatj\\UserAgent\\' => 17,
         ),
         'W' =>
         array (
+            'Wikimedia\\Minify\\' => 17,
             'Whoops\\' => 7,
         ),
         'T' =>
@@ -105,6 +102,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         ),
         'L' =>
         array (
+            'League\\HTMLToMarkdown\\' => 22,
             'League\\CLImate\\' => 15,
         ),
         'G' =>
@@ -130,13 +128,13 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
     );
 
     public static $prefixDirsPsr4 = array (
-        'tubalmartin\\CssMin\\' =>
-        array (
-            0 => __DIR__ . '/..' . '/tubalmartin/cssmin/src',
-        ),
         'donatj\\UserAgent\\' =>
         array (
             0 => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent',
+        ),
+        'Wikimedia\\Minify\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/wikimedia/minify/src',
         ),
         'Whoops\\' =>
         array (
@@ -325,6 +323,10 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         array (
             0 => __DIR__ . '/..' . '/monolog/monolog/src/Monolog',
         ),
+        'League\\HTMLToMarkdown\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/league/html-to-markdown/src',
+        ),
         'League\\CLImate\\' =>
         array (
             0 => __DIR__ . '/..' . '/league/climate/src',
@@ -411,6 +413,13 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
             'Gregwar\\Cache' =>
             array (
                 0 => __DIR__ . '/..' . '/getgrav/cache',
+            ),
+        ),
+        'C' =>
+        array (
+            'CSSMin' =>
+            array (
+                0 => __DIR__ . '/..' . '/wikimedia/minify/src',
             ),
         ),
     );
@@ -731,6 +740,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Grav\\Common\\Helpers\\Exif' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/Exif.php',
         'Grav\\Common\\Helpers\\FileReader' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/FileReader.php',
         'Grav\\Common\\Helpers\\LogViewer' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/LogViewer.php',
+        'Grav\\Common\\Helpers\\PluginAutoloader' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/PluginAutoloader.php',
         'Grav\\Common\\Helpers\\Truncator' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/Truncator.php',
         'Grav\\Common\\Helpers\\YamlLinter' => __DIR__ . '/../..' . '/system/src/Grav/Common/Helpers/YamlLinter.php',
         'Grav\\Common\\Inflector' => __DIR__ . '/../..' . '/system/src/Grav/Common/Inflector.php',
@@ -760,6 +770,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Grav\\Common\\Media\\Interfaces\\MediaPlayerInterface' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Interfaces/MediaPlayerInterface.php',
         'Grav\\Common\\Media\\Interfaces\\MediaUploadInterface' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Interfaces/MediaUploadInterface.php',
         'Grav\\Common\\Media\\Interfaces\\VideoMediaInterface' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Interfaces/VideoMediaInterface.php',
+        'Grav\\Common\\Media\\MediaRouteUrls' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/MediaRouteUrls.php',
         'Grav\\Common\\Media\\Traits\\AudioMediaTrait' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Traits/AudioMediaTrait.php',
         'Grav\\Common\\Media\\Traits\\ImageDecodingTrait' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Traits/ImageDecodingTrait.php',
         'Grav\\Common\\Media\\Traits\\ImageFetchPriorityTrait' => __DIR__ . '/../..' . '/system/src/Grav/Common/Media/Traits/ImageFetchPriorityTrait.php',
@@ -784,6 +795,8 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Grav\\Common\\Page\\Interfaces\\PageTranslateInterface' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Interfaces/PageTranslateInterface.php',
         'Grav\\Common\\Page\\Interfaces\\PagesSourceInterface' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Interfaces/PagesSourceInterface.php',
         'Grav\\Common\\Page\\Markdown\\Excerpts' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Markdown/Excerpts.php',
+        'Grav\\Common\\Page\\Markdown\\MarkdownOutput' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Markdown/MarkdownOutput.php',
+        'Grav\\Common\\Page\\Markdown\\PlainTextConverter' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Markdown/PlainTextConverter.php',
         'Grav\\Common\\Page\\Media' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Media.php',
         'Grav\\Common\\Page\\Medium\\AbstractMedia' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Medium/AbstractMedia.php',
         'Grav\\Common\\Page\\Medium\\AudioMedium' => __DIR__ . '/../..' . '/system/src/Grav/Common/Page/Medium/AudioMedium.php',
@@ -1259,6 +1272,33 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'League\\CLImate\\Util\\Writer\\StdErr' => __DIR__ . '/..' . '/league/climate/src/Util/Writer/StdErr.php',
         'League\\CLImate\\Util\\Writer\\StdOut' => __DIR__ . '/..' . '/league/climate/src/Util/Writer/StdOut.php',
         'League\\CLImate\\Util\\Writer\\WriterInterface' => __DIR__ . '/..' . '/league/climate/src/Util/Writer/WriterInterface.php',
+        'League\\HTMLToMarkdown\\Coerce' => __DIR__ . '/..' . '/league/html-to-markdown/src/Coerce.php',
+        'League\\HTMLToMarkdown\\Configuration' => __DIR__ . '/..' . '/league/html-to-markdown/src/Configuration.php',
+        'League\\HTMLToMarkdown\\ConfigurationAwareInterface' => __DIR__ . '/..' . '/league/html-to-markdown/src/ConfigurationAwareInterface.php',
+        'League\\HTMLToMarkdown\\Converter\\BlockquoteConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/BlockquoteConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\CodeConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/CodeConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\CommentConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/CommentConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\ConverterInterface' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/ConverterInterface.php',
+        'League\\HTMLToMarkdown\\Converter\\DefaultConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/DefaultConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\DivConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/DivConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\EmphasisConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/EmphasisConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\HardBreakConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/HardBreakConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\HeaderConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/HeaderConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\HorizontalRuleConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/HorizontalRuleConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\ImageConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/ImageConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\LinkConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/LinkConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\ListBlockConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/ListBlockConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\ListItemConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/ListItemConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\ParagraphConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/ParagraphConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\PreformattedConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/PreformattedConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\TableConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/TableConverter.php',
+        'League\\HTMLToMarkdown\\Converter\\TextConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/Converter/TextConverter.php',
+        'League\\HTMLToMarkdown\\Element' => __DIR__ . '/..' . '/league/html-to-markdown/src/Element.php',
+        'League\\HTMLToMarkdown\\ElementInterface' => __DIR__ . '/..' . '/league/html-to-markdown/src/ElementInterface.php',
+        'League\\HTMLToMarkdown\\Environment' => __DIR__ . '/..' . '/league/html-to-markdown/src/Environment.php',
+        'League\\HTMLToMarkdown\\HtmlConverter' => __DIR__ . '/..' . '/league/html-to-markdown/src/HtmlConverter.php',
+        'League\\HTMLToMarkdown\\HtmlConverterInterface' => __DIR__ . '/..' . '/league/html-to-markdown/src/HtmlConverterInterface.php',
+        'League\\HTMLToMarkdown\\PreConverterInterface' => __DIR__ . '/..' . '/league/html-to-markdown/src/PreConverterInterface.php',
         'Monolog\\Attribute\\AsMonologProcessor' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Attribute/AsMonologProcessor.php',
         'Monolog\\Attribute\\WithMonologChannel' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Attribute/WithMonologChannel.php',
         'Monolog\\DateTimeImmutable' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/DateTimeImmutable.php',
@@ -1279,9 +1319,11 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Monolog\\Formatter\\LogstashFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/LogstashFormatter.php',
         'Monolog\\Formatter\\MongoDBFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/MongoDBFormatter.php',
         'Monolog\\Formatter\\NormalizerFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/NormalizerFormatter.php',
+        'Monolog\\Formatter\\RedactingFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/RedactingFormatter.php',
         'Monolog\\Formatter\\ScalarFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/ScalarFormatter.php',
         'Monolog\\Formatter\\SyslogFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/SyslogFormatter.php',
         'Monolog\\Formatter\\WildfireFormatter' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/WildfireFormatter.php',
+        'Monolog\\Formatter\\WrappingFormatterInterface' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Formatter/WrappingFormatterInterface.php',
         'Monolog\\Handler\\AbstractHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/AbstractHandler.php',
         'Monolog\\Handler\\AbstractProcessingHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/AbstractProcessingHandler.php',
         'Monolog\\Handler\\AbstractSyslogHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/AbstractSyslogHandler.php',
@@ -1309,6 +1351,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Monolog\\Handler\\FlowdockHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/FlowdockHandler.php',
         'Monolog\\Handler\\FormattableHandlerInterface' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/FormattableHandlerInterface.php',
         'Monolog\\Handler\\FormattableHandlerTrait' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/FormattableHandlerTrait.php',
+        'Monolog\\Handler\\FrankenPhpHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/FrankenPhpHandler.php',
         'Monolog\\Handler\\GelfHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/GelfHandler.php',
         'Monolog\\Handler\\GroupHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/GroupHandler.php',
         'Monolog\\Handler\\Handler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/Handler.php',
@@ -1317,6 +1360,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Monolog\\Handler\\IFTTTHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/IFTTTHandler.php',
         'Monolog\\Handler\\InsightOpsHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/InsightOpsHandler.php',
         'Monolog\\Handler\\LogEntriesHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/LogEntriesHandler.php',
+        'Monolog\\Handler\\LogMonsterHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/LogMonsterHandler.php',
         'Monolog\\Handler\\LogglyHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/LogglyHandler.php',
         'Monolog\\Handler\\LogmaticHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/LogmaticHandler.php',
         'Monolog\\Handler\\MailHandler' => __DIR__ . '/..' . '/monolog/monolog/src/Monolog/Handler/MailHandler.php',
@@ -1398,6 +1442,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Negotiation\\Exception\\InvalidMediaType' => __DIR__ . '/..' . '/willdurand/negotiation/src/Negotiation/Exception/InvalidMediaType.php',
         'Negotiation\\LanguageNegotiator' => __DIR__ . '/..' . '/willdurand/negotiation/src/Negotiation/LanguageNegotiator.php',
         'Negotiation\\Negotiator' => __DIR__ . '/..' . '/willdurand/negotiation/src/Negotiation/Negotiator.php',
+        'Net_URL2' => __DIR__ . '/..' . '/pear/net_url2/Net/URL2.php',
         'Normalizer' => __DIR__ . '/..' . '/symfony/polyfill-intl-normalizer/Resources/stubs/Normalizer.php',
         'Nyholm\\Psr7Server\\ServerRequestCreator' => __DIR__ . '/..' . '/nyholm/psr7-server/src/ServerRequestCreator.php',
         'Nyholm\\Psr7Server\\ServerRequestCreatorInterface' => __DIR__ . '/..' . '/nyholm/psr7-server/src/ServerRequestCreatorInterface.php',
@@ -1578,10 +1623,16 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Symfony\\Component\\Cache\\Traits\\FilesystemCommonTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/FilesystemCommonTrait.php',
         'Symfony\\Component\\Cache\\Traits\\FilesystemTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/FilesystemTrait.php',
         'Symfony\\Component\\Cache\\Traits\\ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/ProxyTrait.php',
+        'Symfony\\Component\\Cache\\Traits\\Redis5Proxy' => __DIR__ . '/..' . '/symfony/cache/Traits/Redis5Proxy.php',
+        'Symfony\\Component\\Cache\\Traits\\Redis61ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/Redis61ProxyTrait.php',
         'Symfony\\Component\\Cache\\Traits\\Redis62ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/Redis62ProxyTrait.php',
         'Symfony\\Component\\Cache\\Traits\\Redis63ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/Redis63ProxyTrait.php',
+        'Symfony\\Component\\Cache\\Traits\\Redis6Proxy' => __DIR__ . '/..' . '/symfony/cache/Traits/Redis6Proxy.php',
+        'Symfony\\Component\\Cache\\Traits\\RedisCluster5Proxy' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisCluster5Proxy.php',
+        'Symfony\\Component\\Cache\\Traits\\RedisCluster61ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisCluster61ProxyTrait.php',
         'Symfony\\Component\\Cache\\Traits\\RedisCluster62ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisCluster62ProxyTrait.php',
         'Symfony\\Component\\Cache\\Traits\\RedisCluster63ProxyTrait' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisCluster63ProxyTrait.php',
+        'Symfony\\Component\\Cache\\Traits\\RedisCluster6Proxy' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisCluster6Proxy.php',
         'Symfony\\Component\\Cache\\Traits\\RedisClusterNodeProxy' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisClusterNodeProxy.php',
         'Symfony\\Component\\Cache\\Traits\\RedisClusterProxy' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisClusterProxy.php',
         'Symfony\\Component\\Cache\\Traits\\RedisProxy' => __DIR__ . '/..' . '/symfony/cache/Traits/RedisProxy.php',
@@ -1594,10 +1645,12 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Symfony\\Component\\Cache\\Traits\\Relay\\Relay22Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/Relay22Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\Relay30Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/Relay30Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\Relay40Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/Relay40Trait.php',
+        'Symfony\\Component\\Cache\\Traits\\Relay\\Relay50Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/Relay50Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\RelayCluster20Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/RelayCluster20Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\RelayCluster21Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/RelayCluster21Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\RelayCluster30Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/RelayCluster30Trait.php',
         'Symfony\\Component\\Cache\\Traits\\Relay\\RelayCluster40Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/RelayCluster40Trait.php',
+        'Symfony\\Component\\Cache\\Traits\\Relay\\RelayCluster50Trait' => __DIR__ . '/..' . '/symfony/cache/Traits/Relay/RelayCluster50Trait.php',
         'Symfony\\Component\\Console\\Application' => __DIR__ . '/..' . '/symfony/console/Application.php',
         'Symfony\\Component\\Console\\Attribute\\Argument' => __DIR__ . '/..' . '/symfony/console/Attribute/Argument.php',
         'Symfony\\Component\\Console\\Attribute\\AsCommand' => __DIR__ . '/..' . '/symfony/console/Attribute/AsCommand.php',
@@ -1792,6 +1845,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Symfony\\Component\\HttpClient\\Internal\\DnsCache' => __DIR__ . '/..' . '/symfony/http-client/Internal/DnsCache.php',
         'Symfony\\Component\\HttpClient\\Internal\\HttplugWaitLoop' => __DIR__ . '/..' . '/symfony/http-client/Internal/HttplugWaitLoop.php',
         'Symfony\\Component\\HttpClient\\Internal\\NativeClientState' => __DIR__ . '/..' . '/symfony/http-client/Internal/NativeClientState.php',
+        'Symfony\\Component\\HttpClient\\Internal\\OutgoingRequest' => __DIR__ . '/..' . '/symfony/http-client/Internal/OutgoingRequest.php',
         'Symfony\\Component\\HttpClient\\Internal\\PushedResponse' => __DIR__ . '/..' . '/symfony/http-client/Internal/PushedResponse.php',
         'Symfony\\Component\\HttpClient\\Messenger\\PingWebhookMessage' => __DIR__ . '/..' . '/symfony/http-client/Messenger/PingWebhookMessage.php',
         'Symfony\\Component\\HttpClient\\Messenger\\PingWebhookMessageHandler' => __DIR__ . '/..' . '/symfony/http-client/Messenger/PingWebhookMessageHandler.php',
@@ -2011,6 +2065,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Twig\\Attribute\\AsTwigTest' => __DIR__ . '/..' . '/twig/twig/src/Attribute/AsTwigTest.php',
         'Twig\\Attribute\\FirstClassTwigCallableReady' => __DIR__ . '/..' . '/twig/twig/src/Attribute/FirstClassTwigCallableReady.php',
         'Twig\\Attribute\\YieldReady' => __DIR__ . '/..' . '/twig/twig/src/Attribute/YieldReady.php',
+        'Twig\\BlockChain' => __DIR__ . '/..' . '/twig/twig/src/BlockChain.php',
         'Twig\\Cache\\CacheInterface' => __DIR__ . '/..' . '/twig/twig/src/Cache/CacheInterface.php',
         'Twig\\Cache\\ChainCache' => __DIR__ . '/..' . '/twig/twig/src/Cache/ChainCache.php',
         'Twig\\Cache\\FilesystemCache' => __DIR__ . '/..' . '/twig/twig/src/Cache/FilesystemCache.php',
@@ -2056,6 +2111,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Twig\\ExpressionParser\\PrefixExpressionParserInterface' => __DIR__ . '/..' . '/twig/twig/src/ExpressionParser/PrefixExpressionParserInterface.php',
         'Twig\\ExpressionParser\\Prefix\\GroupingExpressionParser' => __DIR__ . '/..' . '/twig/twig/src/ExpressionParser/Prefix/GroupingExpressionParser.php',
         'Twig\\ExpressionParser\\Prefix\\LiteralExpressionParser' => __DIR__ . '/..' . '/twig/twig/src/ExpressionParser/Prefix/LiteralExpressionParser.php',
+        'Twig\\ExpressionParser\\Prefix\\SpreadExpressionParser' => __DIR__ . '/..' . '/twig/twig/src/ExpressionParser/Prefix/SpreadExpressionParser.php',
         'Twig\\ExpressionParser\\Prefix\\UnaryOperatorExpressionParser' => __DIR__ . '/..' . '/twig/twig/src/ExpressionParser/Prefix/UnaryOperatorExpressionParser.php',
         'Twig\\ExtensionSet' => __DIR__ . '/..' . '/twig/twig/src/ExtensionSet.php',
         'Twig\\Extension\\AbstractExtension' => __DIR__ . '/..' . '/twig/twig/src/Extension/AbstractExtension.php',
@@ -2154,6 +2210,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Twig\\Node\\Expression\\EmptyExpression' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/EmptyExpression.php',
         'Twig\\Node\\Expression\\FilterExpression' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/FilterExpression.php',
         'Twig\\Node\\Expression\\Filter\\DefaultFilter' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/Filter/DefaultFilter.php',
+        'Twig\\Node\\Expression\\Filter\\EscapeFilter' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/Filter/EscapeFilter.php',
         'Twig\\Node\\Expression\\Filter\\RawFilter' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/Filter/RawFilter.php',
         'Twig\\Node\\Expression\\FunctionExpression' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/FunctionExpression.php',
         'Twig\\Node\\Expression\\FunctionNode\\EnumCasesFunction' => __DIR__ . '/..' . '/twig/twig/src/Node/Expression/FunctionNode/EnumCasesFunction.php',
@@ -2210,20 +2267,21 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Twig\\Node\\ImportNode' => __DIR__ . '/..' . '/twig/twig/src/Node/ImportNode.php',
         'Twig\\Node\\IncludeNode' => __DIR__ . '/..' . '/twig/twig/src/Node/IncludeNode.php',
         'Twig\\Node\\MacroDeclarationNode' => __DIR__ . '/..' . '/twig/twig/src/Node/MacroDeclarationNode.php',
-        'Twig\\Node\\MacroImportsNode' => __DIR__ . '/..' . '/twig/twig/src/Node/MacroImportsNode.php',
         'Twig\\Node\\MacroNode' => __DIR__ . '/..' . '/twig/twig/src/Node/MacroNode.php',
         'Twig\\Node\\MacrosNode' => __DIR__ . '/..' . '/twig/twig/src/Node/MacrosNode.php',
         'Twig\\Node\\ModuleNode' => __DIR__ . '/..' . '/twig/twig/src/Node/ModuleNode.php',
         'Twig\\Node\\NameDeprecation' => __DIR__ . '/..' . '/twig/twig/src/Node/NameDeprecation.php',
         'Twig\\Node\\Node' => __DIR__ . '/..' . '/twig/twig/src/Node/Node.php',
         'Twig\\Node\\NodeCaptureInterface' => __DIR__ . '/..' . '/twig/twig/src/Node/NodeCaptureInterface.php',
+        'Twig\\Node\\NodeDocumentation' => __DIR__ . '/..' . '/twig/twig/src/Node/NodeDocumentation.php',
         'Twig\\Node\\NodeOutputInterface' => __DIR__ . '/..' . '/twig/twig/src/Node/NodeOutputInterface.php',
         'Twig\\Node\\Nodes' => __DIR__ . '/..' . '/twig/twig/src/Node/Nodes.php',
         'Twig\\Node\\PrintNode' => __DIR__ . '/..' . '/twig/twig/src/Node/PrintNode.php',
         'Twig\\Node\\SandboxNode' => __DIR__ . '/..' . '/twig/twig/src/Node/SandboxNode.php',
         'Twig\\Node\\SetNode' => __DIR__ . '/..' . '/twig/twig/src/Node/SetNode.php',
-        'Twig\\Node\\SkipLazyMacroImportsNode' => __DIR__ . '/..' . '/twig/twig/src/Node/SkipLazyMacroImportsNode.php',
         'Twig\\Node\\TextNode' => __DIR__ . '/..' . '/twig/twig/src/Node/TextNode.php',
+        'Twig\\Node\\TrustedTemplateGuardNode' => __DIR__ . '/..' . '/twig/twig/src/Node/TrustedTemplateGuardNode.php',
+        'Twig\\Node\\TypeNode' => __DIR__ . '/..' . '/twig/twig/src/Node/TypeNode.php',
         'Twig\\Node\\TypesNode' => __DIR__ . '/..' . '/twig/twig/src/Node/TypesNode.php',
         'Twig\\Node\\WithNode' => __DIR__ . '/..' . '/twig/twig/src/Node/WithNode.php',
         'Twig\\OperatorPrecedenceChange' => __DIR__ . '/..' . '/twig/twig/src/OperatorPrecedenceChange.php',
@@ -2241,6 +2299,7 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Twig\\RuntimeLoader\\RuntimeLoaderInterface' => __DIR__ . '/..' . '/twig/twig/src/RuntimeLoader/RuntimeLoaderInterface.php',
         'Twig\\Runtime\\EscaperRuntime' => __DIR__ . '/..' . '/twig/twig/src/Runtime/EscaperRuntime.php',
         'Twig\\Runtime\\SandboxBridgeRuntime' => __DIR__ . '/..' . '/twig/twig/src/Runtime/SandboxBridgeRuntime.php',
+        'Twig\\Sandbox\\CompileTimeSourcePolicyInterface' => __DIR__ . '/..' . '/twig/twig/src/Sandbox/CompileTimeSourcePolicyInterface.php',
         'Twig\\Sandbox\\Sandbox' => __DIR__ . '/..' . '/twig/twig/src/Sandbox/Sandbox.php',
         'Twig\\Sandbox\\SandboxInterface' => __DIR__ . '/..' . '/twig/twig/src/Sandbox/SandboxInterface.php',
         'Twig\\Sandbox\\SecurityChecker' => __DIR__ . '/..' . '/twig/twig/src/Sandbox/SecurityChecker.php',
@@ -2314,27 +2373,36 @@ class ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2
         'Whoops\\Util\\Misc' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Util/Misc.php',
         'Whoops\\Util\\SystemFacade' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Util/SystemFacade.php',
         'Whoops\\Util\\TemplateHelper' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Util/TemplateHelper.php',
+        'Wikimedia\\Minify\\CSSMin' => __DIR__ . '/..' . '/wikimedia/minify/src/CSSMin.php',
+        'Wikimedia\\Minify\\Cli' => __DIR__ . '/..' . '/wikimedia/minify/src/Cli.php',
+        'Wikimedia\\Minify\\IdentityMinifierState' => __DIR__ . '/..' . '/wikimedia/minify/src/IdentityMinifierState.php',
+        'Wikimedia\\Minify\\IndexMap' => __DIR__ . '/..' . '/wikimedia/minify/src/IndexMap.php',
+        'Wikimedia\\Minify\\IndexMapOffset' => __DIR__ . '/..' . '/wikimedia/minify/src/IndexMapOffset.php',
+        'Wikimedia\\Minify\\JavaScriptMapperState' => __DIR__ . '/..' . '/wikimedia/minify/src/JavaScriptMapperState.php',
+        'Wikimedia\\Minify\\JavaScriptMinifier' => __DIR__ . '/..' . '/wikimedia/minify/src/JavaScriptMinifier.php',
+        'Wikimedia\\Minify\\JavaScriptMinifierState' => __DIR__ . '/..' . '/wikimedia/minify/src/JavaScriptMinifierState.php',
+        'Wikimedia\\Minify\\MapperState' => __DIR__ . '/..' . '/wikimedia/minify/src/MapperState.php',
+        'Wikimedia\\Minify\\MappingsGenerator' => __DIR__ . '/..' . '/wikimedia/minify/src/MappingsGenerator.php',
+        'Wikimedia\\Minify\\MinifierState' => __DIR__ . '/..' . '/wikimedia/minify/src/MinifierState.php',
+        'Wikimedia\\Minify\\ParseError' => __DIR__ . '/..' . '/wikimedia/minify/src/ParseError.php',
+        'Wikimedia\\Minify\\Utils' => __DIR__ . '/..' . '/wikimedia/minify/src/Utils.php',
         'donatj\\UserAgent\\Bots' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/Bots.php',
         'donatj\\UserAgent\\Browsers' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/Browsers.php',
         'donatj\\UserAgent\\Platforms' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/Platforms.php',
         'donatj\\UserAgent\\UserAgent' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/UserAgent.php',
         'donatj\\UserAgent\\UserAgentInterface' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/UserAgentInterface.php',
         'donatj\\UserAgent\\UserAgentParser' => __DIR__ . '/..' . '/donatj/phpuseragentparser/src/UserAgent/UserAgentParser.php',
-        'tubalmartin\\CssMin\\Colors' => __DIR__ . '/..' . '/tubalmartin/cssmin/src/Colors.php',
-        'tubalmartin\\CssMin\\Command' => __DIR__ . '/..' . '/tubalmartin/cssmin/src/Command.php',
-        'tubalmartin\\CssMin\\Minifier' => __DIR__ . '/..' . '/tubalmartin/cssmin/src/Minifier.php',
-        'tubalmartin\\CssMin\\Utils' => __DIR__ . '/..' . '/tubalmartin/cssmin/src/Utils.php',
         '©' => __DIR__ . '/..' . '/symfony/cache/Traits/ValueWrapper.php',
     );
 
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2::$prefixDirsPsr4;
-            $loader->fallbackDirsPsr4 = ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2::$fallbackDirsPsr4;
-            $loader->prefixesPsr0 = ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2::$prefixesPsr0;
-            $loader->classMap = ComposerStaticInit1dd663bd521cb92772a23acb2f91b5f2::$classMap;
+            $loader->prefixLengthsPsr4 = ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad::$prefixDirsPsr4;
+            $loader->fallbackDirsPsr4 = ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad::$fallbackDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad::$prefixesPsr0;
+            $loader->classMap = ComposerStaticInit91c4570dd1637b5f82fad3da69e78cad::$classMap;
 
         }, null, ClassLoader::class);
     }
