@@ -6,3 +6,10 @@ custom_logo:
     size: 19787
     path: user/themes/quark2/images/logo/mas-logo-dark.png
     url: /amersaeed/user/themes/quark2/images/logo/mas-logo-dark.png
+custom_favicon:
+  'user/themes/quark2/images/favicon/Amer Saeed-favicon.png':
+    name: 'Amer Saeed-favicon.png'
+    type: image/png
+    size: 4945
+    path: 'user/themes/quark2/images/favicon/Amer Saeed-favicon.png'
+    url: '/amersaeed/user/themes/quark2/images/favicon/Amer Saeed-favicon.png'
