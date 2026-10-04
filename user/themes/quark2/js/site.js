@@ -134,4 +134,62 @@
       if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
+
+  // Scroll-reveal for feature/client/testimonial cards. The `.reveal` class
+  // (and its hidden starting state) is only ever added here, so a visitor
+  // with JS disabled — or who prefers reduced motion — just sees everything
+  // in place from first paint.
+  var reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var revealCards = document.querySelectorAll(
+    '.modular-features .column, .client-card, .testimonial-card'
+  );
+  if (revealCards.length && !reduceMotion && 'IntersectionObserver' in window) {
+    revealCards.forEach(function (el, i) {
+      el.classList.add('reveal');
+      el.style.transitionDelay = (i % 4) * 80 + 'ms';
+    });
+    var revealObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('in-view');
+          revealObserver.unobserve(entry.target);
+        });
+      },
+      { threshold: 0.15 }
+    );
+    revealCards.forEach(function (el) { revealObserver.observe(el); });
+  }
+
+  // Count up numeric feature headers on reveal, e.g. "30 Years in IT" counts
+  // from 0 to 30. Purely additive: headers that don't start with a number
+  // (the vast majority of feature blocks) are left untouched.
+  var countEls = document.querySelectorAll('.modular-features h6');
+  if (countEls.length && !reduceMotion && 'IntersectionObserver' in window) {
+    var countObserver = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          countObserver.unobserve(entry.target);
+          var el = entry.target;
+          var match = el.textContent.match(/^(\d+)(.*)$/);
+          if (!match) return;
+          var target = parseInt(match[1], 10);
+          var suffix = match[2];
+          var duration = 1000;
+          var start = null;
+          function step(ts) {
+            if (start === null) start = ts;
+            var progress = Math.min((ts - start) / duration, 1);
+            var eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(eased * target) + suffix;
+            if (progress < 1) window.requestAnimationFrame(step);
+          }
+          window.requestAnimationFrame(step);
+        });
+      },
+      { threshold: 0.5 }
+    );
+    countEls.forEach(function (el) { countObserver.observe(el); });
+  }
 })();

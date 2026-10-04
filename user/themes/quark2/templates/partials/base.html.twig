@@ -26,9 +26,8 @@
     <link rel="icon" type="{{ favicon_type }}" href="{{ favicon_url ?: url('theme://images/favicon.png') }}" />
     <link rel="canonical" href="{{ page.url(true, true) }}" />
 
-    {# Preload the critical latin subsets so headings + body text render in-font on first paint #}
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/cal-sans/cal-sans-latin.woff2') }}" />
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/inter/inter-latin.woff2') }}" />
+    {# Preload the critical latin subset so headings + body text render in-font on first paint #}
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="{{ url('theme://fonts/nunito/nunito-latin.woff2') }}" />
 
     {% if accent_is_hex %}
     {# User-configured accent: tint links, focus ring, and filled UI accents with the chosen hex #}
@@ -105,9 +104,10 @@
                         </div>
                     </div>
                     <div class="navbar-section actions">
+                        {% include 'partials/social-links.html.twig' %}
                         {% include 'partials/theme-toggle.html.twig' %}
                         {% if config.plugins.login.enabled and grav.user.username %}
-                            <span class="login-status-wrapper"><i class="fa-solid fa-user" aria-hidden="true"></i> {% include 'partials/login-status.html.twig' ignore missing %}</span>
+                            {% include 'partials/login-status.html.twig' ignore missing %}
                         {% endif %}
                     </div>
                 </nav>
@@ -143,6 +143,18 @@
         {% include 'partials/footer.html.twig' %}
     {% endblock %}
 
+    {% set can_edit_pages = grav.user.authorize('admin.super') or grav.user.authorize('api.super') or grav.user.authorize('api.pages.write') %}
+    {% if config.plugins.login.enabled and grav.user.username and can_edit_pages %}
+    {# Floating "edit this page" shortcut for logged-in editors — jumps
+       straight into Admin's editor for the page currently being viewed. #}
+    <a class="edit-page-fab"
+       href="{{ config.plugins.admin2.route|default('/admin') }}/pages{{ page.rawRoute }}"
+       title="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}"
+       aria-label="{{ 'THEME_QUARK2.ARIA.EDIT_PAGE'|t|default('Edit this page')|e('html_attr') }}">
+        <i class="fa-solid fa-pen" aria-hidden="true"></i>
+    </a>
+    {% endif %}
+
     {% block mobile %}
     <div class="mobile-container">
         <div class="overlay" id="overlay" role="dialog" aria-label="{{ 'THEME_QUARK2.ARIA.MENU'|t|e('html_attr') }}">
@@ -152,7 +164,10 @@
             <nav class="overlay-menu" aria-label="{{ 'THEME_QUARK2.ARIA.MOBILE_NAV'|t|e('html_attr') }}">
                 {% include 'partials/navigation.html.twig' with {tree: true} %}
             </nav>
-            <div style="margin-top:2rem;">
+            <div class="mobile-overlay-actions">
+                {% include 'partials/social-links.html.twig' %}
+            </div>
+            <div style="margin-top:1.25rem;">
                 {% include 'partials/theme-toggle.html.twig' with {labeled: true} %}
             </div>
         </div>

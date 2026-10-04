@@ -9,6 +9,6 @@
         <img src="{{ url('theme://images/logo/' ~ logo_file) }}" alt="{{ site.title }}" />
     {% endif %}
 {% else %}
-    {% include '@images/grav-logo.svg' ignore missing %}
+    <span class="navbar-brand-text">{{ site.author.name|default(site.title) }}</span>
 {% endif %}
 </a>

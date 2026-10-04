@@ -1,9 +1,31 @@
 {% set id = id|default('hero') %}
 {% set content = content|default(page.content) %}
+{% set has_aurora = 'hero-aurora' in (page.header.hero_classes|default('')) %}
 <section id="{{ id }}"
          class="section modular-hero hero {{ page.header.hero_classes }} {{ page.header.background.parallax ? 'parallax' : '' }}"
          {% if hero_image %}style="background-image: url('{{ hero_image.url }}');"{% endif %}>
     {% if hero_image %}<div class="image-overlay"></div>{% endif %}
+    {% if has_aurora %}
+    {# A wireframe globe watermark behind the text — meridian/latitude rings
+       plus a few small markers for the countries client work spans (PK, KSA,
+       UAE, CN). Slow whole-globe rotation, markers pulse gently on their own
+       cycle. Purely decorative: aria-hidden, motion stops under
+       reduced-motion. #}
+    <svg class="hero-network" viewBox="0 0 100 40" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        <g class="hero-globe" style="transform-origin: 50px 20px;">
+            <circle cx="50" cy="20" r="16" class="hero-globe__ring" />
+            <ellipse cx="50" cy="20" rx="16" ry="10" class="hero-globe__ring" />
+            <ellipse cx="50" cy="20" rx="16" ry="5" class="hero-globe__ring" />
+            <ellipse cx="50" cy="20" rx="10" ry="16" class="hero-globe__ring" />
+            <ellipse cx="50" cy="20" rx="5" ry="16" class="hero-globe__ring" />
+            <line x1="34" y1="20" x2="66" y2="20" class="hero-globe__ring" />
+            <circle cx="43" cy="15" r="0.9" class="hero-globe__marker hero-globe__marker--1" />
+            <circle cx="58" cy="12" r="0.9" class="hero-globe__marker hero-globe__marker--2" />
+            <circle cx="60" cy="24" r="0.9" class="hero-globe__marker hero-globe__marker--3" />
+            <circle cx="41" cy="27" r="0.9" class="hero-globe__marker hero-globe__marker--4" />
+        </g>
+    </svg>
+    {% endif %}
     <div class="container" style="text-align: {{ page.header.hero_align|default('center') }}">
         {{ content|raw }}
     </div>
