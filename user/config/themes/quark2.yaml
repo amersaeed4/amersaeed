@@ -1,2 +1,8 @@
 accent-color: '#714B67'
-custom_logo: {  }
+custom_logo:
+  user/themes/quark2/images/logo/mas-logo-dark.png:
+    name: mas-logo-dark.png
+    type: image/png
+    size: 19787
+    path: user/themes/quark2/images/logo/mas-logo-dark.png
+    url: /amersaeed/user/themes/quark2/images/logo/mas-logo-dark.png
